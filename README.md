@@ -1,149 +1,125 @@
-# go-mcp-postgres
+# Postgres MCP Server
 
-## Overview
+A single-binary MCP server for PostgreSQL, powered by the `gomcpgo/mcp` SDK.
+No Node.js, Python, or other runtime required — download, configure the DSN, connect to any MCP client.
 
-Copy code from https://github.com/Zhwt/go-mcp-mysql/ and with AI help, I change db from mysql to postgres.
-Zero burden, ready-to-use Model Context Protocol (MCP) server for interacting with Postgres and automation. No Node.js or Python environment needed. This server provides tools to do CRUD operations on MySQL databases and tables, and a read-only mode to prevent surprise write operations. You can also make the MCP server check the query plan by using a `EXPLAIN` statement before executing the query by adding a `--with-explain-check` flag.
+## Features
 
-Please note that this is a work in progress and may not yet be ready for production use.
+- **10 tools** — full DDL + DML: query, count, describe, create, alter, insert, update, delete
+- **Read-only mode** — hide all write tools with a single flag
+- **EXPLAIN pre-check** — validate query plan before executing (optional)
+- **CSV output** — all query results formatted as clean CSV
+- **stdio transport** — reads JSON-RPC from stdin, writes to stdout (compatible with `mcp-gateway-go`)
 
-## Installation
+## Build
 
-1. Get the latest [release](https://github.com/guoling2008/go-mcp-postgres/releases) and put it in your `$PATH` or somewhere you can easily access.
-
-2. Or if you have Go installed, you can build it from source:
-
-```sh
-go install -v github.com/guoling2008/go-mcp-postgres@latest
+```bash
+./run.sh build
+# or
+go build -o bin/postgres-server ./cmd
 ```
 
-## Usage
+Requires Go 1.23+.
 
-### Method A: Using Command Line Arguments for stdio mode
+## Run
 
-```json
-{
-  "mcpServers": {
-    "postgres": {
-      "command": "go-mcp-postgres",
-      "args": [
-        "--dsn",
-        "postgresql://user:pass@host:port/db"
-      ]
-    }
-  }
-}
+```bash
+# Using run.sh (requires PG_DSN)
+export PG_DSN="postgresql://user:pass@host:5432/mydb"
+./run.sh run
+
+# Binary directly
+./bin/postgres-server \
+  --dsn "postgresql://user:pass@host:5432/mydb" \
+  --read-only \
+  --with-explain-check \
+  --log-level error
 ```
 
+### Flags
 
-
-Note: For those who put the binary outside of your `$PATH`, you need to replace `go-mcp-postgres` with the full path to the binary: e.g.: if you put the binary in the **Downloads** folder, you may use the following path:
-
-```json
-{
-  "mcpServers": {
-    "postgres": {
-      "command": "C:\\Users\\<username>\\Downloads\\go-mcp-postgres.exe",
-      "args": [
-        ...
-      ]
-    }
-  }
-}
-```
-
-### Method B: Using Command Line Arguments for sse mode
-
-./go-mcp-postgres --t sse --ip x.x.x.x --port nnnn --dsn postgresql://user:pass@host:port/db --lang en
-
-### Optional Flags
-
-- `--lang`: Set language option (en/zh-CN), defaults to system language
-- Add a `--read-only` flag to enable read-only mode. In this mode, only tools beginning with `list`, `read_` and `desc_` are available. Make sure to refresh/restart the MCP server after adding this flag.
-- By default, CRUD queries will be first executed with a `EXPLAIN ?` statement to check whether the generated query plan matches the expected pattern. Add a `--with-explain-check` flag to disable this behavior.
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--prefix` | `pg_` | Tool name prefix (e.g. `pg_read_query`) |
+| `--dsn` | — | **Required.** Postgres DSN (`postgresql://user:pass@host:port/db`) |
+| `--read-only` | `false` | Disable write tools |
+| `--with-explain-check` | `false` | Run `EXPLAIN` before executing (validates plan) |
+| `--log-level` | `error` | `debug \| info \| warn \| error` |
+| `--version` | | Print version and exit |
 
 ## Tools
 
-_Multi-language support: All tool descriptions will automatically localize based on lang parameter_
+### Read-only (always available)
 
-If you want to add your own language support, please refer to the [locales](for i18n) folder.
-The new locales/xxx/active-xx.toml file should be created if you want to use it in command line.
+- **`pg_list_database`** — List all non-template databases
+- **`pg_list_table`** — List all tables (schema + name)
+- **`pg_desc_table`** — Describe table structure as `CREATE TABLE` SQL. Param: `name`
+- **`pg_read_query`** — Execute a SELECT query. Param: `query`
+- **`pg_count_query`** — Get row count for a table. Param: `name`
 
-### Schema Tools
+### Write (hidden when `--read-only = true`)
 
-1. `list_database`
+- **`pg_create_table`** — Execute DDL to create a table. Param: `query`
+- **`pg_alter_table`** — Execute DDL to alter a table. Param: `query`
+- **`pg_write_query`** — Execute an INSERT statement. Param: `query`
+- **`pg_update_query`** — Execute an UPDATE statement (must have WHERE). Param: `query`
+- **`pg_delete_query`** — Execute a DELETE statement (must have WHERE). Param: `query`
 
-    - ${mcp.tool.list_database.desc}
-    - Parameters: None
-    - Returns: A list of matching database names.
+## Usage with `mcp-gateway-go`
 
-2. `list_table`
+```json
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "/path/to/bin/postgres-server",
+      "args": [
+        "--dsn", "postgresql://user:pass@host:5432/mydb",
+        "--read-only"
+      ]
+    }
+  }
+}
+```
 
-    - ${mcp.tool.list_table.desc}
-    - Parameters:
-        - `name`: If provided, list tables with the specified name, Otherwise, list all tables.
-    - Returns: A list of matching table names.
+## Testing
 
-3. `create_table`
+### Unit tests (no DB required)
 
-    - ${mcp.tool.create_table.desc}
-    - Parameters:
-        - `query`: The SQL query to create the table.
-    - Returns: x rows affected.
+```bash
+go test ./... -v -count=1
+```
 
-4. `alter_table`
+### Integration tests (requires a running Postgres)
 
-    - Alter an existing table in the Postgres server. The LLM is informed not to drop an existing table or column.
-    - Parameters:
-        - `query`: The SQL query to alter the table.
-    - Returns: x rows affected.
+```bash
+export PG_DSN="postgresql://user:pass@host:5432/mydb"
+./testing/test-runner.sh
+```
 
-5. `desc_table`
+Each integration test spawns the server, sends a JSON-RPC `tools/call`, and validates the MCP response structure with `jq`.
 
-    - Describe the structure of a table.
-    - Parameters:
-        - `name`: The name of the table to describe.
-    - Returns: The structure of the table.
-  
-### Data Tools
+## Project Structure
 
-1. `read_query`
-
-    - Execute a read-only SQL query.
-    - Parameters:
-        - `query`: The SQL query to execute.
-    - Returns: The result of the query.
-
-2. `write_query`
-
-    - Execute a write SQL query.
-    - Parameters:
-        - `query`: The SQL query to execute.
-    - Returns: x rows affected, last insert id: <last_insert_id>.
-
-3. `update_query`
-
-    - Execute an update SQL query.
-    - Parameters:
-        - `query`: The SQL query to execute.
-    - Returns: x rows affected.
-
-4. `delete_query`
-
-    - Execute a delete SQL query.
-    - Parameters:
-        - `query`: The SQL query to execute.
-    - Returns: x rows affected.
-    
-5. `count_query`
-
-    - Query the number of rows in a certain table..
-    - Parameters:
-        - `name`: The name of the table to count.
-    - Returns: The row number of the table.
-    
-Big thanks to https://github.com/Zhwt/go-mcp-mysql/ again.
+```
+├── cmd/
+│   └── main.go          # Entry point: flags, logging, server start
+├── pkg/handler/
+│   ├── postgres.go      # Handler struct + CallTool router
+│   ├── tools.go         # Tool registry (10 tools, read-only filter)
+│   ├── params.go        # parseStringParam helper
+│   ├── db.go            # DB pool, DoQuery, HandleExec, HandleExplain, MapToCSV
+│   ├── query_handlers.go# 5 read handlers
+│   ├── write_handlers.go# 5 write handlers
+│   ├── helpers.go       # textResponse wrapper
+│   └── handler_test.go  # Unit tests (stdlib only, no DB)
+├── testing/
+│   ├── test-runner.sh   # Master test runner
+│   └── test-*.sh        # Per-tool integration tests (require PG_DSN)
+├── bin/                 # Built binary (gitignored, .gitkeep tracked)
+├── run.sh               # build / run helper
+└── go.mod
+```
 
 ## License
 
-MIT
+MIT License
