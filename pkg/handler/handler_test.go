@@ -40,7 +40,7 @@ func TestReadOnlyToolFiltering(t *testing.T) {
 	}
 
 	for _, name := range []string{
-		"list_table", "desc_table", "read_query", "count_query",
+		"list_tables", "desc_table", "select_query", "count_query",
 	} {
 		if !names[name] {
 			t.Errorf("ro mode: missing read-only tool: %s", name)
@@ -48,7 +48,7 @@ func TestReadOnlyToolFiltering(t *testing.T) {
 	}
 
 	for _, name := range []string{
-		"create_table", "alter_table", "write_query",
+		"create_table", "alter_table", "insert_query",
 		"update_query", "delete_query",
 	} {
 		if names[name] {

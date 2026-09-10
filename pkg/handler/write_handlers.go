@@ -59,7 +59,7 @@ func (h *PostgresHandler) handleAlterTable(args map[string]interface{}) (*protoc
 	return textResponse(result), nil
 }
 
-func (h *PostgresHandler) handleWriteQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {
+func (h *PostgresHandler) handleInsertQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {
 	database, err := parseStringParam(args, "database")
 	if err != nil {
 		return nil, err
@@ -71,14 +71,14 @@ func (h *PostgresHandler) handleWriteQuery(args map[string]interface{}) (*protoc
 	}
 
 	if h.readOnly {
-		slog.Error("write_query - server is read-only")
-		return nil, fmt.Errorf("write_query: server is read-only, cannot execute write operations")
+		slog.Error("insert_query - server is read-only")
+		return nil, fmt.Errorf("insert_query: server is read-only, cannot execute write operations")
 	}
 
 	result, err := h.HandleExec(database, query, StatementTypeInsert)
 	if err != nil {
-		slog.Error("write_query - failed", "error", err)
-		return nil, fmt.Errorf("write_query: %w", err)
+		slog.Error("insert_query - failed", "error", err)
+		return nil, fmt.Errorf("insert_query: %w", err)
 	}
 
 	return textResponse(result), nil

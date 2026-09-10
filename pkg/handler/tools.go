@@ -13,7 +13,7 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 	t := []protocol.Tool{
 		{
 			// Tool Definition
-			Name:        prefix + "list_table",
+			Name:        prefix + "list_tables",
 			Description: "List all tables in the public schema (pg_catalog and information_schema are excluded)",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
@@ -37,17 +37,17 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 						"type": "string",
 						"description": "Name of the database to run the query against"
 					},
-					"name": {
+					"table": {
 						"type": "string",
 						"description": "Name of the table"
 					}
 				},
-				"required": ["database", "name"]
+				"required": ["database", "table"]
 			}`),
 		},
 		{
 			// Tool Definition
-			Name:        prefix + "read_query",
+			Name:        prefix + "select_query",
 			Description: "Execute a read-only SQL query. Make sure you have knowledge of the table structure before writing WHERE conditions. Call `desc_table` first if necessary",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
@@ -75,12 +75,12 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 						"type": "string",
 						"description": "Name of the database to run the query against"
 					},
-					"name": {
+					"table": {
 						"type": "string",
 						"description": "Name of the table"
 					}
 				},
-				"required": ["database", "name"]
+				"required": ["database", "table"]
 			}`),
 		},
 	}
@@ -127,7 +127,7 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 			}`),
 		},
 		protocol.Tool{
-			Name:        prefix + "write_query",
+			Name:        prefix + "insert_query",
 			Description: "Execute a write SQL query. Make sure you have knowledge of the table structure before executing the query. Make sure the data types match the columns' definitions",
 			InputSchema: json.RawMessage(`{
 				"type": "object",

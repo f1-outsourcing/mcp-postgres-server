@@ -17,7 +17,7 @@ func (h *PostgresHandler) handleListTable(args map[string]interface{}) (*protoco
 
 	rows, _, err := h.DoQuery(database, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;", StatementTypeNoExplainCheck)
 	if err != nil {
-		return nil, fmt.Errorf("list_table: %w", err)
+		return nil, fmt.Errorf("list_tables: %w", err)
 	}
 
 	names := make([]string, 0, len(rows))
@@ -36,14 +36,14 @@ func (h *PostgresHandler) handleDescTable(args map[string]interface{}) (*protoco
 		return nil, err
 	}
 
-	name, err := parseStringParam(args, "name")
+	table, err := parseStringParam(args, "table")
 	if err != nil {
 		return nil, err
 	}
 
-	if !isSQLIdentifier(name) {
-		slog.Error("desc_table - invalid table name", "name", name)
-		return nil, fmt.Errorf("invalid table name: %s", name)
+	if !isSQLIdentifier(table) {
+		slog.Error("desc_table - invalid table name", "table", table)
+		return nil, fmt.Errorf("invalid table name: %s", table)
 	}
 
 	descsql :=
@@ -71,7 +71,7 @@ FROM
 JOIN
     information_schema.columns c ON t.table_name = c.table_name
 WHERE
-    t.table_name = '` + name + `'
+    t.table_name = '` + table + `'
 GROUP BY
     t.table_name;`
 
@@ -81,7 +81,7 @@ GROUP BY
 	}
 
 	if len(rows) == 0 {
-		return nil, fmt.Errorf("desc_table: table %s not found", name)
+		return nil, fmt.Errorf("desc_table: table %s not found", table)
 	}
 
 	return textResponse(fmt.Sprintf("%v", rows[0]["?column?"])), nil
@@ -100,7 +100,7 @@ func (h *PostgresHandler) handleReadQuery(args map[string]interface{}) (*protoco
 
 	result, err := h.HandleQuery(database, query, StatementTypeSelect)
 	if err != nil {
-		return nil, fmt.Errorf("read_query: %w", err)
+		return nil, fmt.Errorf("select_query: %w", err)
 	}
 
 	return textResponse(result), nil
@@ -112,17 +112,17 @@ func (h *PostgresHandler) handleCountQuery(args map[string]interface{}) (*protoc
 		return nil, err
 	}
 
-	name, err := parseStringParam(args, "name")
+	table, err := parseStringParam(args, "table")
 	if err != nil {
 		return nil, err
 	}
 
-	if !isSQLIdentifier(name) {
-		slog.Error("count_query - invalid table name", "name", name)
-		return nil, fmt.Errorf("invalid table name: %s", name)
+	if !isSQLIdentifier(table) {
+		slog.Error("count_query - invalid table name", "table", table)
+		return nil, fmt.Errorf("invalid table name: %s", table)
 	}
 
-	result, err := h.HandleQuery(database, "SELECT count(1) from "+name+";", StatementTypeNoExplainCheck)
+	result, err := h.HandleQuery(database, "SELECT count(1) from "+table+";", StatementTypeNoExplainCheck)
 	if err != nil {
 		return nil, fmt.Errorf("count_query: %w", err)
 	}

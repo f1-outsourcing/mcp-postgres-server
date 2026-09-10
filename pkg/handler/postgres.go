@@ -57,7 +57,7 @@ func (h *PostgresHandler) ListTools(ctx context.Context) (*protocol.ListToolsRes
 func (h *PostgresHandler) CallTool(ctx context.Context, req *protocol.CallToolRequest) (*protocol.CallToolResponse, error) {
 	slog.Debug("PostgresHandler: Executing tool", "tool", req.Name)
 
-	// this keeps the server respond to the original "read_query" as well.
+	// this keeps the server respond to the original "select_query" as well.
 	// I have the impression vscode/continuedev is buggy with the auto prefix adding.
 	actualToolName := req.Name
 	if strings.HasPrefix(req.Name, h.prefix) {
@@ -65,7 +65,7 @@ func (h *PostgresHandler) CallTool(ctx context.Context, req *protocol.CallToolRe
 	}
 
 	switch actualToolName {
-	case "list_table":
+	case "list_tables":
 		return h.handleListTable(req.Arguments)
 	case "create_table":
 		return h.handleCreateTable(req.Arguments)
@@ -73,12 +73,12 @@ func (h *PostgresHandler) CallTool(ctx context.Context, req *protocol.CallToolRe
 		return h.handleAlterTable(req.Arguments)
 	case "desc_table":
 		return h.handleDescTable(req.Arguments)
-	case "read_query":
+	case "select_query":
 		return h.handleReadQuery(req.Arguments)
 	case "count_query":
 		return h.handleCountQuery(req.Arguments)
-	case "write_query":
-		return h.handleWriteQuery(req.Arguments)
+	case "insert_query":
+		return h.handleInsertQuery(req.Arguments)
 	case "update_query":
 		return h.handleUpdateQuery(req.Arguments)
 	case "delete_query":

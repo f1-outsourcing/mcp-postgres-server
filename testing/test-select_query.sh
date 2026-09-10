@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test script for read_query tool
+# Test script for select_query tool
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,9 +13,9 @@ cd "$SCRIPT_DIR/../"
 [ -f "bin/postgres-server" ] || go build -o bin/postgres-server ./cmd
 cd "$SCRIPT_DIR"
 
-echo "=== Testing read_query ==="
+echo "=== Testing select_query ==="
 
-RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"read_query","arguments":{"query":"SELECT 1 AS one"}},"id":4}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
+RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"select_query","arguments":{"query":"SELECT 1 AS one"}},"id":4}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
 
 echo "Raw response: $RESPONSE"
 
@@ -38,4 +38,4 @@ else
 fi
 
 echo ""
-echo "=== read_query test PASSED ==="
+echo "=== select_query test PASSED ==="

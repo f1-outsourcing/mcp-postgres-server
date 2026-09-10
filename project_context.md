@@ -35,8 +35,8 @@ pkg/handler/postgres.go   # PostgresHandler struct, ListTools, CallTool router
 pkg/handler/tools.go      # buildTools(): tool registry + read-only filter
 pkg/handler/params.go     # parseStringParam(), isSQLIdentifier()
 pkg/handler/db.go         # Lazy DB pool, DoQuery/HandleQuery/HandleExec/HandleExplain/MapToCSV
-pkg/handler/query_handlers.go   # list_table, desc_table, read_query, count_query
-pkg/handler/write_handlers.go   # create_table, alter_table, write_query, update_query, delete_query
+pkg/handler/query_handlers.go   # list_tables, desc_table, select_query, count_query
+pkg/handler/write_handlers.go   # create_table, alter_table, insert_query, update_query, delete_query
 pkg/handler/helpers.go    # textResponse() MCP response wrapper
 pkg/handler/handler_test.go     # Unit tests (stdlib-only, no DB)
 testing/test-runner.sh    # Master integration runner
@@ -89,7 +89,7 @@ External:
 
 1. Client writes JSON-RPC `tools/call` to **stdin** (stdio transport from the mcp SDK).
 2. SDK routes to `PostgresHandler.CallTool` (`postgres.go`); prefix trimmed if present.
-3. Param parsed via `parseStringParam`; identifier-checked where a `name` is embedded in SQL.
+3. Param parsed via `parseStringParam`; identifier-checked where a `table` name is embedded in SQL.
 4. `handleX()` calls `DoQuery` (reads) or `HandleExec` (writes) from `db.go`, passing the expected statement type.
 5. If `withExplainCheck` is on: `HandleExplain` runs `EXPLAIN <query>` first (currently MySQL-shaped — see Gotchas).
 6. `DB()` opens the `sqlx` pool lazily from `dsn` on first request.
@@ -99,8 +99,8 @@ External:
 ## Key Domain Concepts
 
 - **MCP tool**: name, description, JSON-Schema input; invoked via `tools/call`.
-- **Read tools (always available)**: `list_table`, `desc_table`, `read_query`, `count_query`.
-- **Write tools (hidden by `--read-only`)**: `create_table`, `alter_table`, `write_query` (INSERT), `update_query` (UPDATE), `delete_query` (DELETE).
+- **Read tools (always available)**: `list_tables`, `desc_table`, `select_query`, `count_query`.
+- **Write tools (hidden by `--read-only`)**: `create_table`, `alter_table`, `insert_query` (INSERT), `update_query` (UPDATE), `delete_query` (DELETE).
 - **Read-only mode**: filtered in `buildTools()` *and* re-checked inside every write handler (double gate).
 - **Prefix**: optional tool-name prefix (`--prefix`); `CallTool` accepts both prefixed and bare names.
 - **EXPLAIN pre-check** (`--with-explain-check`): validate query plan matches expected statement type before executing.
@@ -143,7 +143,7 @@ docker build . --file Dockerfile    # ⚠️ Dockerfile is NOT present in the cu
 - Standard Go module layout: `cmd/` for the binary, `pkg/` for reusable code.
 - Flat package `handler` (no sub-packages); files split by responsibility, all one package.
 - `PostgresHandler` methods, exported entry API (`ListTools`/`CallTool`/`Set*`), unexported `handleX` per tool.
-- Errors: wrapped with `%w`, prefixed with tool name (`"read_query: %w"`); handler returns `(nil, err)` on failure.
+- Errors: wrapped with `%w`, prefixed with tool name (`"select_query: %w"`); handler returns `(nil, err)` on failure.
 - Logging: `log/slog`, text handler on **stderr**, `slog.Error` for expected guard rejections.
 - Raw JSON for tool input schemas (`json.RawMessage`), not Go structs.
 - Tests: stdlib `testing` only, no DB (DB behavior covered by shell integration tests); small table/subtests (`TestParseStringParam`).
@@ -154,7 +154,7 @@ docker build . --file Dockerfile    # ⚠️ Dockerfile is NOT present in the cu
 - **Lazy DB connection** (`DB()` in `db.go`): the server must start and answer `ListTools` even before/without a reachable Postgres. `SetDSN` deliberately does not connect (documented in `postgres.go`).
 - **Read-only enforcement is double-gated** (registry filter + per-handler checks) so a bypassed registry can't execute writes.
 - **Prefix dual-acceptance** in `CallTool` (comment in `postgres.go`: some clients auto-add the prefix, some don't).
-- **Identifier safety only for `name`-style params**; full-SQL `query` params are passed through verbatim by design — the LLM writes the SQL, so there is no query-level sanitization.
+- **Identifier safety only for `table` param**; full-SQL `query` params are passed through verbatim by design — the LLM writes the SQL, so there is no query-level sanitization.
 - **CSV as the canonical result format** for LLM-friendly, unambiguous parsing.
 - **No transaction usage**, single shared `sqlx.DB` pool for the process lifetime.
 - **stdio-only transport**; keep stdout clean of all non-protocol output (hence stderr logging).
@@ -163,12 +163,12 @@ docker build . --file Dockerfile    # ⚠️ Dockerfile is NOT present in the cu
 
 1. **`HandleExplain` is MySQL-shaped, not Postgres-shaped** (`db.go`): `ExplainResult` scans columns like `select_type`, `partitions`, `key_len` (MySQL `EXPLAIN` schema). Postgres `EXPLAIN` emits a different column set, and DDL statements can't be `EXPLAIN`ed at all. `--with-explain-check` is likely broken/erroring on real Postgres — do not extend it without fixing first.
 2. **`desc_table` output is a synthetic pseudo-`CREATE TABLE` string** built by one big `information_schema` SQL (`query_handlers.go`), not real DDL: primary keys only (guessed via `constraint_name LIKE '%_pkey'`), no indexes/FKs/defaults; result read via the `?column?` key (Postgres name for the unnamed computed column).
-3. **`read_query`/`write_query` execute arbitrary SQL as given** — only the tool description constrains the LLM; the only enforcement is read-only mode for the write *tools*, not the statement type. "UPDATE must have WHERE" is description-only.
-4. **Read-only ≠ schema-only**: `read_query` has no SELECT-only restriction (unless the broken EXPLAIN check is enabled).
+3. **`select_query`/`insert_query` execute arbitrary SQL as given** — only the tool description constrains the LLM; the only enforcement is read-only mode for the write *tools*, not the statement type. "UPDATE must have WHERE" is description-only.
+4. **Read-only ≠ schema-only**: `select_query` has no SELECT-only restriction (unless the broken EXPLAIN check is enabled).
 5. **`.github/workflows/docker-image.yml` builds a `Dockerfile` that doesn't exist** in the current tree — that workflow is currently broken.
 6. **`.gitignore` also ignores `.github/`**, `bin/`, `*.swp`, and generic leftovers (Composer, WordPress, `target/`) — the ignore file is boilerplate, not project-specific; `.github`/`bin/.gitkeep` are still tracked despite this.
 7. **Stray files**: `.README.md.swp` vim swap (gitignored), `.continue` (19-byte IDE artifact).
-8. **`count_query` CSV**: expects a header row from `MapToCSV`; `list_table` returns plain newline-separated names (no header) — inconsistent format between read tools.
+8. **`count_query` CSV**: expects a header row from `MapToCSV`; `list_tables` returns plain newline-separated names (no header) — inconsistent format between read tools.
 9. **`parseStringParam`'s `fmt.Stringer` branch** is defensive (args arrive as native strings after JSON decode) — don't rely on it for non-string JSON values (`42` ⇒ error).
 10. **`version` is hardcoded** (`"1.0.0"`) in `cmd/main.go`; there is also a TODO about a hardcoded prefix related to `mcp-gateway-go` not sending args.
 11. **Git history is mixed**: older commits are an upstream MySQL/Docker variant (`guoling21cn`); recent commits ("first working version on stdio", "removed list databases", "application alignment") pivoted it to a Postgres stdio server. Some legacy assumptions may linger.
@@ -182,15 +182,15 @@ docker build . --file Dockerfile    # ⚠️ Dockerfile is NOT present in the cu
 - `run.sh` and all `testing/test-*.sh` scripts assume binary at `bin/postgres-server` and repo root one level up from `testing/`.
 - There is **no linter, no import ordering tool, no Makefile** — follow existing style (tabs, Go standard formatting).
 - Dependencies should stay minimal (3 runtime deps); the value proposition is "single binary, no other runtime".
-- If fixing `--with-explain-check`: real Postgres `EXPLAIN` uses a single `QUERY PLAN` text column (or `FORMAT JSON/YAML`), and cannot be applied to DDL — `read_query`/`count_query` pass statement types that the current code path can't meaningfully verify.
+- If fixing `--with-explain-check`: real Postgres `EXPLAIN` uses a single `QUERY PLAN` text column (or `FORMAT JSON/YAML`), and cannot be applied to DDL — `select_query`/`count_query` pass statement types that the current code path can't meaningfully verify.
 
 
 ## Update log
 
 ### 2026-09-10 — added required `database` parameter per tool call
 
-Every tool (`list_table`, `desc_table`, `count_query`, `read_query`, `create_table`,
-`alter_table`, `write_query`, `update_query`, `delete_query`) now requires a
+Every tool (`list_tables`, `desc_table`, `count_query`, `select_query`, `create_table`,
+`alter_table`, `insert_query`, `update_query`, `delete_query`) now requires a
 `database` string argument. `buildTools()` (`tools.go`) declares it in each
 tool's JSON-Schema; every `handleX` in `query_handlers.go`/`write_handlers.go`
 parses it via `parseStringParam(args, "database")` and threads it through

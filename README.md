@@ -40,7 +40,7 @@ export PG_DSN="postgresql://user:pass@host:5432/mydb?sslmode=disable"
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--prefix` | *(empty)* | Tool name prefix (e.g. `pg_read_query`) |
+| `--prefix` | *(empty)* | Tool name prefix (e.g. `pg_select_query`) |
 | `--dsn` | — | **Required.** Postgres DSN (`postgresql://user:pass@host:port/db`) |
 | `--read-only` | `false` | Disable write tools |
 | `--with-explain-check` | `false` | Run `EXPLAIN` before executing (validates plan) |
@@ -53,16 +53,16 @@ export PG_DSN="postgresql://user:pass@host:5432/mydb?sslmode=disable"
 
 ### Read-only (always available)
 
-- **`list_table`** — List all tables in the `public` schema (one name per line)
-- **`desc_table`** — Describe table structure as raw `CREATE TABLE` SQL. Param: `name`
-- **`read_query`** — Execute a SELECT query. Param: `query`
-- **`count_query`** — Get row count for a table. Param: `name`
+- **`list_tables`** — List all tables in the `public` schema (one name per line)
+- **`desc_table`** — Describe table structure as raw `CREATE TABLE` SQL. Param: `table`
+- **`select_query`** — Execute a SELECT query. Param: `query`
+- **`count_query`** — Get row count for a table. Param: `table`
 
 ### Write (hidden when `--read-only = true`)
 
 - **`create_table`** — Execute DDL to create a table. Param: `query`
 - **`alter_table`** — Execute DDL to alter a table. Param: `query`
-- **`write_query`** — Execute an INSERT statement. Param: `query`
+- **`insert_query`** — Execute an INSERT statement. Param: `query`
 - **`update_query`** — Execute an UPDATE statement (must have WHERE). Param: `query`
 - **`delete_query`** — Execute a DELETE statement (must have WHERE). Param: `query`
 
