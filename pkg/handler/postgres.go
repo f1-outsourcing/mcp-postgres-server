@@ -64,8 +64,6 @@ func (h *PostgresHandler) CallTool(ctx context.Context, req *protocol.CallToolRe
 	}
 
 	switch actualToolName {
-	case "list_database":
-		return h.handleListDatabase(req.Arguments)
 	case "list_table":
 		return h.handleListTable(req.Arguments)
 	case "create_table":

@@ -13,15 +13,15 @@ import (
 // tests in testing/ (requires PG_DSN).
 
 func TestReadOnlyToolFiltering(t *testing.T) {
-	h := NewPostgresHandlerWithPrefix("pg_")
+	h := NewPostgresHandlerWithPrefix("")
 
 	h.SetReadOnly(false)
 	resp, err := h.ListTools(context.Background())
 	if err != nil {
 		t.Fatalf("ListTools failed: %v", err)
 	}
-	if got := len(resp.Tools); got != 10 {
-		t.Errorf("rw mode: expected 10 tools, got %d", got)
+	if got := len(resp.Tools); got != 9 {
+		t.Errorf("rw mode: expected 9 tools, got %d", got)
 	}
 
 	h.SetReadOnly(true)
@@ -30,8 +30,8 @@ func TestReadOnlyToolFiltering(t *testing.T) {
 		t.Fatalf("ListTools failed: %v", err)
 	}
 	tools := resp.Tools
-	if len(tools) != 5 {
-		t.Fatalf("ro mode: expected 5 tools, got %d", len(tools))
+	if len(tools) != 4 {
+		t.Fatalf("ro mode: expected 4 tools, got %d", len(tools))
 	}
 
 	names := map[string]bool{}
@@ -40,8 +40,7 @@ func TestReadOnlyToolFiltering(t *testing.T) {
 	}
 
 	for _, name := range []string{
-		"pg_list_database", "pg_list_table", "pg_desc_table",
-		"pg_read_query", "pg_count_query",
+		"list_table", "desc_table", "read_query", "count_query",
 	} {
 		if !names[name] {
 			t.Errorf("ro mode: missing read-only tool: %s", name)
@@ -49,8 +48,8 @@ func TestReadOnlyToolFiltering(t *testing.T) {
 	}
 
 	for _, name := range []string{
-		"pg_create_table", "pg_alter_table", "pg_write_query",
-		"pg_update_query", "pg_delete_query",
+		"create_table", "alter_table", "write_query",
+		"update_query", "delete_query",
 	} {
 		if names[name] {
 			t.Errorf("ro mode: unexpected write tool: %s", name)
@@ -59,8 +58,8 @@ func TestReadOnlyToolFiltering(t *testing.T) {
 }
 
 func TestCallToolUnknownTool(t *testing.T) {
-	h := NewPostgresHandlerWithPrefix("pg_")
-	req := &protocol.CallToolRequest{Name: "pg_bogus_tool"}
+	h := NewPostgresHandlerWithPrefix("")
+	req := &protocol.CallToolRequest{Name: "bogus_tool"}
 	resp, err := h.CallTool(context.Background(), req)
 	if err == nil {
 		t.Fatalf("expected error for unknown tool, got response %v", resp)

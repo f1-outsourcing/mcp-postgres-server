@@ -17,7 +17,7 @@ const version = "1.0.0"
 
 func main() {
 	showVersion := flag.Bool("version", false, "Print version and exit")
-	prefix := flag.String("prefix", "pg_", "Prefix for tool names")
+	prefix := flag.String("prefix", "", "Prefix for tool names")
 	dsn := flag.String("dsn", "", "Postgres DSN (e.g. postgresql://user:pass@host:port/db)")
 	readOnly := flag.Bool("read-only", false, "Disable write tools (create/alter/write/update/delete)")
 	withExplainCheck := flag.Bool("with-explain-check", false, "Check query plan with `EXPLAIN` before executing")

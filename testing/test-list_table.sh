@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test script for pg_list_table tool
+# Test script for list_table tool
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,9 +13,9 @@ cd "$SCRIPT_DIR/../"
 [ -f "bin/postgres-server" ] || go build -o bin/postgres-server ./cmd
 cd "$SCRIPT_DIR"
 
-echo "=== Testing pg_list_table ==="
+echo "=== Testing list_table ==="
 
-RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"pg_list_table","arguments":{}},"id":2}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
+RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"list_table","arguments":{}},"id":2}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
 
 echo "Raw response: $RESPONSE"
 
@@ -32,4 +32,4 @@ else
 fi
 
 echo ""
-echo "=== pg_list_table test PASSED ==="
+echo "=== list_table test PASSED ==="

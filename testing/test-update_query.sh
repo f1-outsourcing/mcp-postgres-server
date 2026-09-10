@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test script for pg_update_query tool (no-op smoke test)
+# Test script for update_query tool (no-op smoke test)
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,10 +13,10 @@ cd "$SCRIPT_DIR/../"
 [ -f "bin/postgres-server" ] || go build -o bin/postgres-server ./cmd
 cd "$SCRIPT_DIR"
 
-echo "=== Testing pg_update_query ==="
+echo "=== Testing update_query ==="
 
 # Use a harmless UPDATE with 0-row WHERE clause
-RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"pg_update_query","arguments":{"query":"UPDATE _mcp_smoke_test SET id = 1 WHERE 1=0"}},"id":8}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
+RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"update_query","arguments":{"query":"UPDATE _mcp_smoke_test SET id = 1 WHERE 1=0"}},"id":8}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
 
 echo "Raw response: $RESPONSE"
 
@@ -34,4 +34,4 @@ else
 fi
 
 echo ""
-echo "=== pg_update_query test PASSED ==="
+echo "=== update_query test PASSED ==="

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test script for pg_alter_table tool (DDL smoke test)
+# Test script for alter_table tool (DDL smoke test)
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,10 +13,10 @@ cd "$SCRIPT_DIR/../"
 [ -f "bin/postgres-server" ] || go build -o bin/postgres-server ./cmd
 cd "$SCRIPT_DIR"
 
-echo "=== Testing pg_alter_table ==="
+echo "=== Testing alter_table ==="
 
 # Use a safe no-op DDL statement
-RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"pg_alter_table","arguments":{"query":"CREATE TABLE IF NOT EXISTS _mcp_smoke_test(id INT)"}},"id":7}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
+RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"alter_table","arguments":{"query":"CREATE TABLE IF NOT EXISTS _mcp_smoke_test(id INT)"}},"id":7}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
 
 echo "Raw response: $RESPONSE"
 
@@ -34,4 +34,4 @@ else
 fi
 
 echo ""
-echo "=== pg_alter_table test PASSED ==="
+echo "=== alter_table test PASSED ==="

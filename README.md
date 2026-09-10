@@ -5,7 +5,7 @@ No Node.js, Python, or other runtime required — download, configure the DSN, c
 
 ## Features
 
-- **10 tools** — full DDL + DML: query, count, describe, create, alter, insert, update, delete
+- **9 tools** — full DDL + DML: list tables, describe, query, count, create, alter, insert, update, delete
 - **Read-only mode** — hide all write tools with a single flag
 - **EXPLAIN pre-check** — validate query plan before executing (optional)
 - **CSV output** — all query results formatted as clean CSV
@@ -25,12 +25,12 @@ Requires Go 1.23+.
 
 ```bash
 # Using run.sh (requires PG_DSN)
-export PG_DSN="postgresql://user:pass@host:5432/mydb"
+export PG_DSN="postgresql://user:pass@host:5432/mydb?sslmode=disable"
 ./run.sh run
 
 # Binary directly
 ./bin/postgres-server \
-  --dsn "postgresql://user:pass@host:5432/mydb" \
+  --dsn "postgresql://user:pass@host:5432/mydb?sslmode=disable" \
   --read-only \
   --with-explain-check \
   --log-level error
@@ -40,30 +40,31 @@ export PG_DSN="postgresql://user:pass@host:5432/mydb"
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--prefix` | `pg_` | Tool name prefix (e.g. `pg_read_query`) |
+| `--prefix` | *(empty)* | Tool name prefix (e.g. `pg_read_query`) |
 | `--dsn` | — | **Required.** Postgres DSN (`postgresql://user:pass@host:port/db`) |
 | `--read-only` | `false` | Disable write tools |
 | `--with-explain-check` | `false` | Run `EXPLAIN` before executing (validates plan) |
 | `--log-level` | `error` | `debug \| info \| warn \| error` |
 | `--version` | | Print version and exit |
 
+> **Note:** If your Postgres doesn't have SSL enabled, append `?sslmode=disable` or `?sslmode=prefer` to the DSN.
+
 ## Tools
 
 ### Read-only (always available)
 
-- **`pg_list_database`** — List all non-template databases
-- **`pg_list_table`** — List all tables (schema + name)
-- **`pg_desc_table`** — Describe table structure as `CREATE TABLE` SQL. Param: `name`
-- **`pg_read_query`** — Execute a SELECT query. Param: `query`
-- **`pg_count_query`** — Get row count for a table. Param: `name`
+- **`list_table`** — List all tables in the `public` schema (one name per line)
+- **`desc_table`** — Describe table structure as raw `CREATE TABLE` SQL. Param: `name`
+- **`read_query`** — Execute a SELECT query. Param: `query`
+- **`count_query`** — Get row count for a table. Param: `name`
 
 ### Write (hidden when `--read-only = true`)
 
-- **`pg_create_table`** — Execute DDL to create a table. Param: `query`
-- **`pg_alter_table`** — Execute DDL to alter a table. Param: `query`
-- **`pg_write_query`** — Execute an INSERT statement. Param: `query`
-- **`pg_update_query`** — Execute an UPDATE statement (must have WHERE). Param: `query`
-- **`pg_delete_query`** — Execute a DELETE statement (must have WHERE). Param: `query`
+- **`create_table`** — Execute DDL to create a table. Param: `query`
+- **`alter_table`** — Execute DDL to alter a table. Param: `query`
+- **`write_query`** — Execute an INSERT statement. Param: `query`
+- **`update_query`** — Execute an UPDATE statement (must have WHERE). Param: `query`
+- **`delete_query`** — Execute a DELETE statement (must have WHERE). Param: `query`
 
 ## Usage with `mcp-gateway-go`
 
@@ -73,7 +74,7 @@ export PG_DSN="postgresql://user:pass@host:5432/mydb"
     "postgres": {
       "command": "/path/to/bin/postgres-server",
       "args": [
-        "--dsn", "postgresql://user:pass@host:5432/mydb",
+        "--dsn", "postgresql://user:pass@host:5432/mydb?sslmode=disable",
         "--read-only"
       ]
     }
@@ -92,7 +93,7 @@ go test ./... -v -count=1
 ### Integration tests (requires a running Postgres)
 
 ```bash
-export PG_DSN="postgresql://user:pass@host:5432/mydb"
+export PG_DSN="postgresql://user:pass@host:5432/mydb?sslmode=disable"
 ./testing/test-runner.sh
 ```
 
@@ -105,10 +106,10 @@ Each integration test spawns the server, sends a JSON-RPC `tools/call`, and vali
 │   └── main.go          # Entry point: flags, logging, server start
 ├── pkg/handler/
 │   ├── postgres.go      # Handler struct + CallTool router
-│   ├── tools.go         # Tool registry (10 tools, read-only filter)
-│   ├── params.go        # parseStringParam helper
+│   ├── tools.go         # Tool registry (9 tools, read-only filter)
+│   ├── params.go        # parseStringParam + isSQLIdentifier helpers
 │   ├── db.go            # DB pool, DoQuery, HandleExec, HandleExplain, MapToCSV
-│   ├── query_handlers.go# 5 read handlers
+│   ├── query_handlers.go# 4 read handlers
 │   ├── write_handlers.go# 5 write handlers
 │   ├── helpers.go       # textResponse wrapper
 │   └── handler_test.go  # Unit tests (stdlib only, no DB)

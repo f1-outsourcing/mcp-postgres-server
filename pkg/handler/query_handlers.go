@@ -3,26 +3,26 @@ package handler
 import (
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/gomcpgo/mcp/pkg/protocol"
 )
 
-func (h *PostgresHandler) handleListDatabase(args map[string]interface{}) (*protocol.CallToolResponse, error) {
-	result, err := h.HandleQuery("SELECT datname FROM pg_database WHERE datistemplate = false;", StatementTypeNoExplainCheck)
-	if err != nil {
-		return nil, fmt.Errorf("list_database: %w", err)
-	}
-
-	return textResponse(result), nil
-}
-
+// handleListTable lists public-schema tables one per line, no CSV header.
 func (h *PostgresHandler) handleListTable(args map[string]interface{}) (*protocol.CallToolResponse, error) {
-	result, err := h.HandleQuery("SELECT table_schema,table_name FROM information_schema.tables ORDER BY table_schema,table_name;", StatementTypeNoExplainCheck)
+	rows, _, err := h.DoQuery("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;", StatementTypeNoExplainCheck)
 	if err != nil {
 		return nil, fmt.Errorf("list_table: %w", err)
 	}
 
-	return textResponse(result), nil
+	names := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if v, ok := r["table_name"]; ok {
+			names = append(names, fmt.Sprintf("%v", v))
+		}
+	}
+
+	return textResponse(strings.Join(names, "\n")), nil
 }
 
 func (h *PostgresHandler) handleDescTable(args map[string]interface{}) (*protocol.CallToolResponse, error) {
@@ -55,7 +55,7 @@ func (h *PostgresHandler) handleDescTable(args map[string]interface{}) (*protoco
         FROM information_schema.key_column_usage kcu
         WHERE kcu.table_name = t.table_name AND kcu.constraint_name LIKE '%_pkey'
     ) || ')' ||
-    ');' AS create_table_sql
+    ');'
 FROM
     information_schema.tables t
 JOIN
@@ -65,12 +65,16 @@ WHERE
 GROUP BY
     t.table_name;`
 
-	result, err := h.HandleQuery(descsql, StatementTypeNoExplainCheck)
+	rows, _, err := h.DoQuery(descsql, StatementTypeNoExplainCheck)
 	if err != nil {
 		return nil, fmt.Errorf("desc_table: %w", err)
 	}
 
-	return textResponse(result), nil
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("desc_table: table %s not found", name)
+	}
+
+	return textResponse(fmt.Sprintf("%v", rows[0]["?column?"])), nil
 }
 
 func (h *PostgresHandler) handleReadQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {

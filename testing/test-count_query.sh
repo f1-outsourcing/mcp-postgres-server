@@ -1,5 +1,5 @@
 #!/bin/bash
-# Test script for pg_count_query tool
+# Test script for count_query tool
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -13,9 +13,9 @@ cd "$SCRIPT_DIR/../"
 [ -f "bin/postgres-server" ] || go build -o bin/postgres-server ./cmd
 cd "$SCRIPT_DIR"
 
-echo "=== Testing pg_count_query ==="
+echo "=== Testing count_query ==="
 
-RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"pg_count_query","arguments":{"name":"pg_stat_activity"}},"id":5}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
+RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"count_query","arguments":{"name":"stat_activity"}},"id":5}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
 
 echo "Raw response: $RESPONSE"
 
@@ -35,4 +35,4 @@ else
 fi
 
 echo ""
-echo "=== pg_count_query test PASSED ==="
+echo "=== count_query test PASSED ==="

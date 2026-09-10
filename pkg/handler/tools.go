@@ -13,18 +13,8 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 	t := []protocol.Tool{
 		{
 			// Tool Definition
-			Name:        prefix + "list_database",
-			Description: "List all databases in the POSTGRES server",
-			InputSchema: json.RawMessage(`{
-				"type": "object",
-				"properties": {},
-				"required": []
-			}`),
-		},
-		{
-			// Tool Definition
 			Name:        prefix + "list_table",
-			Description: "List all tables in the POSTGRES server",
+			Description: "List all tables in the public schema (pg_catalog and information_schema are excluded)",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {},
