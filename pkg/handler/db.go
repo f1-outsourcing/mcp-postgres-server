@@ -10,30 +10,6 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-const (
-	StatementTypeNoExplainCheck = ""
-	StatementTypeSelect         = "SELECT"
-	StatementTypeInsert         = "INSERT"
-	StatementTypeUpdate         = "UPDATE"
-	StatementTypeDelete         = "DELETE"
-)
-
-// ExplainResult represents one row of an EXPLAIN result
-type ExplainResult struct {
-	Id           *string `db:"id"`
-	SelectType   *string `db:"select_type"`
-	Table        *string `db:"table"`
-	Partitions   *string `db:"partitions"`
-	Type         *string `db:"type"`
-	PossibleKeys *string `db:"possible_keys"`
-	Key          *string `db:"key"`
-	KeyLen       *string `db:"key_len"`
-	Ref          *string `db:"ref"`
-	Rows         *string `db:"rows"`
-	Filtered     *string `db:"filtered"`
-	Extra        *string `db:"Extra"`
-}
-
 // SetDB overrides the connection pool (used by tests)
 func (h *PostgresHandler) SetDB(db *sqlx.DB) {
 	h.db = db
@@ -82,8 +58,8 @@ func (h *PostgresHandler) DB(dbName string) (*sqlx.DB, error) {
 }
 
 // HandleQuery runs a query and returns the result as CSV
-func (h *PostgresHandler) HandleQuery(dbName, query, expect string) (string, error) {
-	result, headers, err := h.DoQuery(dbName, query, expect)
+func (h *PostgresHandler) HandleQuery(dbName, query string) (string, error) {
+	result, headers, err := h.DoQuery(dbName, query)
 	if err != nil {
 		return "", err
 	}
@@ -97,22 +73,17 @@ func (h *PostgresHandler) HandleQuery(dbName, query, expect string) (string, err
 }
 
 // DoQuery runs a query and returns the raw result rows with their column headers
-func (h *PostgresHandler) DoQuery(dbName, query, expect string) ([]map[string]interface{}, []string, error) {
+func (h *PostgresHandler) DoQuery(dbName, query string) ([]map[string]interface{}, []string, error) {
 	db, err := h.DB(dbName)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	if len(expect) > 0 {
-		if err := h.HandleExplain(dbName, query, expect); err != nil {
-			return nil, nil, err
-		}
 	}
 
 	rows, err := db.Queryx(query)
 	if err != nil {
 		return nil, nil, err
 	}
+	defer rows.Close()
 
 	cols, err := rows.Columns()
 	if err != nil {
@@ -142,16 +113,10 @@ func (h *PostgresHandler) DoQuery(dbName, query, expect string) ([]map[string]in
 }
 
 // HandleExec runs a write statement and reports how many rows were affected
-func (h *PostgresHandler) HandleExec(dbName, query, expect string) (string, error) {
+func (h *PostgresHandler) HandleExec(dbName, query string) (string, error) {
 	db, err := h.DB(dbName)
 	if err != nil {
 		return "", err
-	}
-
-	if len(expect) > 0 {
-		if err := h.HandleExplain(dbName, query, expect); err != nil {
-			return "", err
-		}
 	}
 
 	result, err := db.Exec(query)
@@ -164,75 +129,67 @@ func (h *PostgresHandler) HandleExec(dbName, query, expect string) (string, erro
 		return "", err
 	}
 
-	switch expect {
-	case StatementTypeInsert:
-		li, err := result.LastInsertId()
-		if err != nil {
-			return "", err
-		}
-
-		return fmt.Sprintf("%d rows affected, last insert id: %d", ra, li), nil
-	default:
-		return fmt.Sprintf("%d rows affected", ra), nil
-	}
+	return fmt.Sprintf("%d rows affected", ra), nil
 }
 
-// HandleExplain checks the query plan of the given query matches the expected statement type
-func (h *PostgresHandler) HandleExplain(dbName, query, expect string) error {
-	if !h.withExplainCheck {
-		return nil
-	}
-
+// ExplainPlan returns a human-readable query plan for the given statement.
+//
+// When analyze is true it uses EXPLAIN (ANALYZE, BUFFERS), which EXECUTES the
+// statement (appropriate for SELECT); for writes callers must pass
+// analyze=false so the statement is only planned, not actually run.
+func (h *PostgresHandler) ExplainPlan(dbName, query string, analyze bool) (string, error) {
 	db, err := h.DB(dbName)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	rows, err := db.Queryx(fmt.Sprintf("EXPLAIN %s", query))
+	verb := "EXPLAIN "
+	if analyze {
+		verb = "EXPLAIN (ANALYZE, BUFFERS) "
+	}
+	stmt := verb + query
+
+	rows, err := db.Queryx(stmt)
 	if err != nil {
-		return err
+		return "", err
+	}
+	defer rows.Close()
+
+	cols, err := rows.Columns()
+	if err != nil {
+		return "", err
 	}
 
-	result := []ExplainResult{}
+	var out strings.Builder
+	out.WriteString(strings.Join(cols, " | "))
+	out.WriteByte('\n')
+
 	for rows.Next() {
-		var row ExplainResult
-		if err := rows.StructScan(&row); err != nil {
-			return err
+		vals := make([]interface{}, len(cols))
+		refs := make([]interface{}, len(cols))
+		for i := range cols {
+			refs[i] = &vals[i]
 		}
-		result = append(result, row)
-	}
-
-	if len(result) != 1 {
-		return fmt.Errorf("unable to check query plan, denied")
-	}
-
-	match := false
-	switch expect {
-	case StatementTypeInsert:
-		fallthrough
-	case StatementTypeUpdate:
-		fallthrough
-	case StatementTypeDelete:
-		if *result[0].SelectType == expect {
-			match = true
+		if err := rows.Scan(refs...); err != nil {
+			return "", err
 		}
-	default:
-		// for SELECT type query, the select_type will be multiple values
-		// here we check if it's not INSERT, UPDATE or DELETE
-		match = true
-		for _, typ := range []string{StatementTypeInsert, StatementTypeUpdate, StatementTypeDelete} {
-			if *result[0].SelectType == typ {
-				match = false
-				break
+		parts := make([]string, len(cols))
+		for i, v := range vals {
+			switch t := v.(type) {
+			case []byte:
+				parts[i] = string(t)
+			default:
+				parts[i] = fmt.Sprintf("%v", t)
 			}
 		}
+		out.WriteString(strings.Join(parts, " | "))
+		out.WriteByte('\n')
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
 	}
 
-	if !match {
-		return fmt.Errorf("query plan does not match expected pattern, denied")
-	}
-
-	return nil
+	return strings.TrimSpace(out.String()), nil
 }
 
 // MapToCSV formats query results as CSV

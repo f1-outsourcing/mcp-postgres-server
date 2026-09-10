@@ -7,7 +7,7 @@ No Node.js, Python, or other runtime required — download, configure the DSN, c
 
 - **9 tools** — full DDL + DML: list tables, describe, query, count, create, alter, insert, update, delete
 - **Read-only mode** — hide all write tools with a single flag
-- **EXPLAIN pre-check** — validate query plan before executing (optional)
+- **Optional EXPLAIN** — opt in to the query plan per call (read tools: with results; write tools: preview without executing)
 - **CSV output** — all query results formatted as clean CSV
 - **stdio transport** — reads JSON-RPC from stdin, writes to stdout (compatible with `mcp-gateway-go`)
 
@@ -32,7 +32,6 @@ export PG_DSN="postgresql://user:pass@host:5432/mydb?sslmode=disable"
 ./bin/postgres-server \
   --dsn "postgresql://user:pass@host:5432/mydb?sslmode=disable" \
   --read-only \
-  --with-explain-check \
   --log-level error
 ```
 
@@ -43,7 +42,6 @@ export PG_DSN="postgresql://user:pass@host:5432/mydb?sslmode=disable"
 | `--prefix` | *(empty)* | Tool name prefix (e.g. `pg_select_query`) |
 | `--dsn` | — | **Required.** Postgres DSN (`postgresql://user:pass@host:port/db`) |
 | `--read-only` | `false` | Disable write tools |
-| `--with-explain-check` | `false` | Run `EXPLAIN` before executing (validates plan) |
 | `--log-level` | `error` | `debug \| info \| warn \| error` |
 | `--version` | | Print version and exit |
 
@@ -55,16 +53,16 @@ export PG_DSN="postgresql://user:pass@host:5432/mydb?sslmode=disable"
 
 - **`list_tables`** — List all tables in the `public` schema (one name per line)
 - **`desc_table`** — Describe table structure as raw `CREATE TABLE` SQL. Param: `table`
-- **`select_query`** — Execute a SELECT query. Param: `query`
-- **`count_query`** — Get row count for a table. Param: `table`
+- **`select_query`** — Execute a SELECT query. Param: `query`; optional `explain` (bool, default `false`) returns the `EXPLAIN ANALYZE` plan with the results
+- **`count_query`** — Get row count for a table. Param: `table`; optional `explain` (bool, default `false`)
 
 ### Write (hidden when `--read-only = true`)
 
 - **`create_table`** — Execute DDL to create a table. Param: `query`
 - **`alter_table`** — Execute DDL to alter a table. Param: `query`
-- **`insert_query`** — Execute an INSERT statement. Param: `query`
-- **`update_query`** — Execute an UPDATE statement (must have WHERE). Param: `query`
-- **`delete_query`** — Execute a DELETE statement (must have WHERE). Param: `query`
+- **`insert_query`** — Execute an INSERT statement. Param: `query`; optional `explain` (bool, default `false`) returns the `EXPLAIN` plan **instead of executing**
+- **`update_query`** — Execute an UPDATE statement (must have WHERE). Param: `query`; optional `explain` (bool, default `false`)
+- **`delete_query`** — Execute a DELETE statement (must have WHERE). Param: `query`; optional `explain` (bool, default `false`)
 
 ## Usage with `mcp-gateway-go`
 
@@ -108,7 +106,7 @@ Each integration test spawns the server, sends a JSON-RPC `tools/call`, and vali
 │   ├── postgres.go      # Handler struct + CallTool router
 │   ├── tools.go         # Tool registry (9 tools, read-only filter)
 │   ├── params.go        # parseStringParam + isSQLIdentifier helpers
-│   ├── db.go            # DB pool, DoQuery, HandleExec, HandleExplain, MapToCSV
+│   ├── db.go            # DB pool, DoQuery, HandleExec, ExplainPlan, MapToCSV
 │   ├── query_handlers.go# 4 read handlers
 │   ├── write_handlers.go# 5 write handlers
 │   ├── helpers.go       # textResponse wrapper

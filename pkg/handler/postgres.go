@@ -12,12 +12,11 @@ import (
 
 // PostgresHandler implements the MCP handler interfaces for postgres operations
 type PostgresHandler struct {
-	prefix           string
-	dsn              string
-	readOnly         bool
-	withExplainCheck bool
-	db               *sqlx.DB
-	dbPools          map[string]*sqlx.DB
+	prefix   string
+	dsn      string
+	readOnly bool
+	db       *sqlx.DB
+	dbPools  map[string]*sqlx.DB
 }
 
 // NewPostgresHandler creates a new postgres handler with default prefix
@@ -38,14 +37,9 @@ func (h *PostgresHandler) SetDSN(dsn string) {
 	h.dsn = dsn
 }
 
-// SetReadOnly disables write tools (create/alter/write/update/delete) when true
+// SetReadOnly disables write tools (create/alter/insert/update/delete) when true
 func (h *PostgresHandler) SetReadOnly(readOnly bool) {
 	h.readOnly = readOnly
-}
-
-// SetWithExplainCheck enables the EXPLAIN query-plan pre-check when true
-func (h *PostgresHandler) SetWithExplainCheck(explainCheck bool) {
-	h.withExplainCheck = explainCheck
 }
 
 // ListTools provides a list of all available tools in the postgres handler
@@ -74,7 +68,7 @@ func (h *PostgresHandler) CallTool(ctx context.Context, req *protocol.CallToolRe
 	case "desc_table":
 		return h.handleDescTable(req.Arguments)
 	case "select_query":
-		return h.handleReadQuery(req.Arguments)
+		return h.handleSelectQuery(req.Arguments)
 	case "count_query":
 		return h.handleCountQuery(req.Arguments)
 	case "insert_query":

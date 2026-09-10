@@ -19,8 +19,7 @@ func main() {
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	prefix := flag.String("prefix", "", "Prefix for tool names")
 	dsn := flag.String("dsn", "", "Postgres DSN (e.g. postgresql://user:pass@host:port/db)")
-	readOnly := flag.Bool("read-only", false, "Disable write tools (create/alter/write/update/delete)")
-	withExplainCheck := flag.Bool("with-explain-check", false, "Check query plan with `EXPLAIN` before executing")
+	readOnly := flag.Bool("read-only", false, "Disable write tools (create/alter/insert/update/delete)")
 	logLevel := flag.String("log-level", "error", "debug|info|warn|error")
 
 	flag.Parse()
@@ -63,7 +62,6 @@ func main() {
 	pgHandler := pghandler.NewPostgresHandlerWithPrefix(*prefix)
 	pgHandler.SetDSN(*dsn)
 	pgHandler.SetReadOnly(*readOnly)
-	pgHandler.SetWithExplainCheck(*withExplainCheck)
 
 	// Create handler registry
 	registry := handler.NewHandlerRegistry()

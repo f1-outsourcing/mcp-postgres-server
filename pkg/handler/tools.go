@@ -59,6 +59,10 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 					"query": {
 						"type": "string",
 						"description": "The SQL query to execute"
+					},
+					"explain": {
+						"type": "boolean",
+						"description": "Optional (default false). When true, also return the query plan (EXPLAIN ANALYZE) alongside the results"
 					}
 				},
 				"required": ["database", "query"]
@@ -78,6 +82,10 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 					"table": {
 						"type": "string",
 						"description": "Name of the table"
+					},
+					"explain": {
+						"type": "boolean",
+						"description": "Optional (default false). When true, also return the query plan (EXPLAIN ANALYZE)"
 					}
 				},
 				"required": ["database", "table"]
@@ -139,6 +147,10 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 					"query": {
 						"type": "string",
 						"description": "The SQL query to execute"
+					},
+					"explain": {
+						"type": "boolean",
+						"description": "Optional (default false). When true, return the EXPLAIN plan INSTEAD of executing the statement (not run, only previewed)"
 					}
 				},
 				"required": ["database", "query"]
@@ -157,6 +169,10 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 					"query": {
 						"type": "string",
 						"description": "The SQL query to execute"
+					},
+					"explain": {
+						"type": "boolean",
+						"description": "Optional (default false). When true, return the EXPLAIN plan INSTEAD of executing the statement (not run, only previewed)"
 					}
 				},
 				"required": ["database", "query"]
@@ -175,6 +191,10 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 					"query": {
 						"type": "string",
 						"description": "The SQL query to execute"
+					},
+					"explain": {
+						"type": "boolean",
+						"description": "Optional (default false). When true, return the EXPLAIN plan INSTEAD of executing the statement (not run, only previewed)"
 					}
 				},
 				"required": ["database", "query"]

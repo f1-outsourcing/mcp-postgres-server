@@ -15,7 +15,7 @@ func (h *PostgresHandler) handleListTable(args map[string]interface{}) (*protoco
 		return nil, err
 	}
 
-	rows, _, err := h.DoQuery(database, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;", StatementTypeNoExplainCheck)
+	rows, _, err := h.DoQuery(database, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;")
 	if err != nil {
 		return nil, fmt.Errorf("list_tables: %w", err)
 	}
@@ -75,7 +75,7 @@ WHERE
 GROUP BY
     t.table_name;`
 
-	rows, _, err := h.DoQuery(database, descsql, StatementTypeNoExplainCheck)
+	rows, _, err := h.DoQuery(database, descsql)
 	if err != nil {
 		return nil, fmt.Errorf("desc_table: %w", err)
 	}
@@ -87,7 +87,7 @@ GROUP BY
 	return textResponse(fmt.Sprintf("%v", rows[0]["?column?"])), nil
 }
 
-func (h *PostgresHandler) handleReadQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {
+func (h *PostgresHandler) handleSelectQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {
 	database, err := parseStringParam(args, "database")
 	if err != nil {
 		return nil, err
@@ -98,12 +98,23 @@ func (h *PostgresHandler) handleReadQuery(args map[string]interface{}) (*protoco
 		return nil, err
 	}
 
-	result, err := h.HandleQuery(database, query, StatementTypeSelect)
+	explain, _ := parseBoolParam(args, "explain")
+
+	result, err := h.HandleQuery(database, query)
 	if err != nil {
 		return nil, fmt.Errorf("select_query: %w", err)
 	}
 
-	return textResponse(result), nil
+	if !explain {
+		return textResponse(result), nil
+	}
+
+	plan, err := h.ExplainPlan(database, query, true /* analyze: safe for SELECT */)
+	if err != nil {
+		return nil, fmt.Errorf("select_query (explain): %w", err)
+	}
+
+	return textResponse("--- QUERY PLAN ---\n" + plan + "\n\n--- RESULTS ---\n" + result), nil
 }
 
 func (h *PostgresHandler) handleCountQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {
@@ -122,10 +133,22 @@ func (h *PostgresHandler) handleCountQuery(args map[string]interface{}) (*protoc
 		return nil, fmt.Errorf("invalid table name: %s", table)
 	}
 
-	result, err := h.HandleQuery(database, "SELECT count(1) from "+table+";", StatementTypeNoExplainCheck)
+	sql := "SELECT count(1) from " + table + ";"
+
+	result, err := h.HandleQuery(database, sql)
 	if err != nil {
 		return nil, fmt.Errorf("count_query: %w", err)
 	}
 
-	return textResponse(result), nil
+	explain, _ := parseBoolParam(args, "explain")
+	if !explain {
+		return textResponse(result), nil
+	}
+
+	plan, err := h.ExplainPlan(database, sql, true /* analyze: safe for SELECT */)
+	if err != nil {
+		return nil, fmt.Errorf("count_query (explain): %w", err)
+	}
+
+	return textResponse("--- QUERY PLAN ---\n" + plan + "\n\n--- RESULTS ---\n" + result), nil
 }

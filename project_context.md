@@ -33,8 +33,8 @@ MCP client ──stdin/stdout──▶ gomcpgo/mcp server (protocol, JSON-RPC, r
 cmd/main.go               # Entry point: flags, version, logging, server start
 pkg/handler/postgres.go   # PostgresHandler struct, ListTools, CallTool router
 pkg/handler/tools.go      # buildTools(): tool registry + read-only filter
-pkg/handler/params.go     # parseStringParam(), isSQLIdentifier()
-pkg/handler/db.go         # Lazy DB pool, DoQuery/HandleQuery/HandleExec/HandleExplain/MapToCSV
+pkg/handler/params.go     # parseStringParam(), parseBoolParam(), isSQLIdentifier()
+pkg/handler/db.go         # Lazy DB pool, DoQuery/HandleQuery/HandleExec/ExplainPlan/MapToCSV
 pkg/handler/query_handlers.go   # list_tables, desc_table, select_query, count_query
 pkg/handler/write_handlers.go   # create_table, alter_table, insert_query, update_query, delete_query
 pkg/handler/helpers.go    # textResponse() MCP response wrapper
@@ -51,7 +51,7 @@ go.mod / go.sum           # Dependencies
 ## Entry Points
 
 - **`cmd/main.go`** — the only binary entry point.
-  Flags: `--prefix`, `--dsn`, `--read-only`, `--with-explain-check`, `--log-level`
+  Flags: `--prefix`, `--dsn`, `--read-only`, `--log-level`
   (default `error`), `--version`. DSN falls back to `PG_DSN` env var; missing DSN ⇒ exit 1.
 - **`run.sh`** — `./run.sh build` → `go build -o bin/postgres-server ./cmd`;
   `./run.sh run` → `go run` with `PG_DSN` (required).
@@ -60,15 +60,16 @@ go.mod / go.sum           # Dependencies
 
 | Symbol / File | Responsibility |
 |---|---|
-| `PostgresHandler` (`postgres.go`) | Holds `prefix`, `dsn`, `readOnly`, `withExplainCheck`, `db *sqlx.DB`. Implements MCP `ListTools`/`CallTool`. `CallTool` strips an optional tool-name prefix (clients may or may not send prefixed names) then `switch`es to per-tool handlers; unknown tool ⇒ error. |
+| `PostgresHandler` (`postgres.go`) | Holds `prefix`, `dsn`, `readOnly`, `db *sqlx.DB`, `dbPools`. Implements MCP `ListTools`/`CallTool`. `CallTool` strips an optional tool-name prefix (clients may or may not send prefixed names) then `switch`es to per-tool handlers; unknown tool ⇒ error. |
 | `buildTools()` (`tools.go`) | Declares all 9 tools with JSON-Schema `InputSchema` (raw JSON strings via `json.RawMessage`). In `--read-only` mode returns only the 4 read tools. Tool descriptions embed behavioral guidance for LLM callers (e.g. "must have WHERE", "call desc_table first"). |
 | `parseStringParam()` (`params.go`) | Extracts a required non-empty string arg; defensively accepts `fmt.Stringer`. |
+| `parseBoolParam()` (`params.go`) | Extracts an optional boolean arg (unset/absent ⇒ false); used for the `explain` flag. |
 | `isSQLIdentifier()` (`params.go`) | Guard for bare identifier embedding (letters/digits/underscore, no leading digit). Used only for `name` params (`desc_table`, `count_query`). |
 | `DB()` (`db.go`) | **Lazy** connection: `sqlx.Connect("postgres", dsn)` on first use. `SetDB()` exists for tests. |
 | `HandleQuery()`/`DoQuery()` (`db.go`) | Execute, return rows as `[]map[string]interface{}` (with `[]byte`→`string` conversion) + headers; `HandleQuery` formats via `MapToCSV`. |
-| `HandleExec()` (`db.go`) | `db.Exec` for writes; returns "N rows affected" (+ `LastInsertId` for INSERTs). |
-| `HandleExplain()` (`db.go`) | Optional `EXPLAIN` pre-check comparing `select_type` against expected statement type (see Gotchas). |
-| Handler functions | Thin wrappers: parse param → optional identifier check → `DoQuery`/`HandleExec` with a `StatementType*` expected-type (`db.go` consts) → `textResponse()`; errors wrapped with tool-name prefix and `slog` logging for write failures. |
+| `HandleExec()` (`db.go`) | `db.Exec` for writes; returns "N rows affected". |
+| `ExplainPlan()` (`db.go`) | Runs `EXPLAIN` (or `EXPLAIN (ANALYZE, BUFFERS)` when `analyze=true`) and returns the plan as text. |
+| Handler functions | Thin wrappers: parse param → optional identifier check → `DoQuery`/`HandleExec` → `textResponse()`; optional `explain` flag returns the `EXPLAIN` plan (read tools: alongside results; DML write tools: **instead of executing**). Errors wrapped with tool-name prefix and `slog` logging for write failures. |
 | `textResponse()` (`helpers.go`) | Wraps text in `protocol.CallToolResponse{Content: [{Type: "text", ...}]}`. |
 | `testing/test-*.sh` | Per-tool smoke tests: pipe one JSON-RPC `tools/call` to the built binary, check response with `jq`; write tests use safe no-ops (`_mcp_smoke_test` table, `WHERE 1=0`). |
 
@@ -90,9 +91,8 @@ External:
 1. Client writes JSON-RPC `tools/call` to **stdin** (stdio transport from the mcp SDK).
 2. SDK routes to `PostgresHandler.CallTool` (`postgres.go`); prefix trimmed if present.
 3. Param parsed via `parseStringParam`; identifier-checked where a `table` name is embedded in SQL.
-4. `handleX()` calls `DoQuery` (reads) or `HandleExec` (writes) from `db.go`, passing the expected statement type.
-5. If `withExplainCheck` is on: `HandleExplain` runs `EXPLAIN <query>` first (currently MySQL-shaped — see Gotchas).
-6. `DB()` opens the `sqlx` pool lazily from `dsn` on first request.
+4. `handleX()` calls `DoQuery` (reads) or `HandleExec` (writes) from `db.go`; if the optional `explain` flag is set it also calls `ExplainPlan` (read tools: alongside results; DML writes: instead of executing).
+5. `DB()` opens the `sqlx` pool lazily from `dsn` on first request.
 7. Result → `MapToCSV` (reads) or rows-affected string (writes) → `textResponse()` → response JSON on **stdout**.
 8. All logging goes to **stderr** (`slog` text handler) — stdout is reserved for JSON-RPC.
 
@@ -103,9 +103,8 @@ External:
 - **Write tools (hidden by `--read-only`)**: `create_table`, `alter_table`, `insert_query` (INSERT), `update_query` (UPDATE), `delete_query` (DELETE).
 - **Read-only mode**: filtered in `buildTools()` *and* re-checked inside every write handler (double gate).
 - **Prefix**: optional tool-name prefix (`--prefix`); `CallTool` accepts both prefixed and bare names.
-- **EXPLAIN pre-check** (`--with-explain-check`): validate query plan matches expected statement type before executing.
+- **Optional EXPLAIN** (per-call `explain` flag, default `false`): `select_query`/`count_query` return the `EXPLAIN (ANALYZE, BUFFERS)` plan **with** results; `insert_query`/`update_query`/`delete_query` return the plan **instead of executing** (plain `EXPLAIN`, no `ANALYZE`, so the DML is not run). Implemented by `ExplainPlan()` in `db.go`.
 - **CSV output**: all SELECT results returned as CSV text.
-- **Statement-type consts** (`db.go`): `StatementTypeNoExplainCheck`/`Select`/`Insert`/`Update`/`Delete`.
 
 ## Build / Test / Lint / Deploy Commands
 
@@ -134,7 +133,7 @@ docker build . --file Dockerfile    # ⚠️ Dockerfile is NOT present in the cu
 ## Configuration / Environment Variables
 
 - `PG_DSN` — only env var; required (`--dsn` flag also works and wins if set).
-- Behavior flags: `--prefix`, `--read-only`, `--with-explain-check`, `--log-level`
+- Behavior flags: `--prefix`, `--read-only`, `--log-level`
   (`debug|info|warn|error`, default `error`), `--version`.
 - No config files, no env-based feature toggles beyond the above. CI secrets: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`.
 
@@ -161,10 +160,10 @@ docker build . --file Dockerfile    # ⚠️ Dockerfile is NOT present in the cu
 
 ## Easy-to-Misunderstand Areas / Gotchas
 
-1. **`HandleExplain` is MySQL-shaped, not Postgres-shaped** (`db.go`): `ExplainResult` scans columns like `select_type`, `partitions`, `key_len` (MySQL `EXPLAIN` schema). Postgres `EXPLAIN` emits a different column set, and DDL statements can't be `EXPLAIN`ed at all. `--with-explain-check` is likely broken/erroring on real Postgres — do not extend it without fixing first.
+1. **`create_table`/`alter_table` are DDL and cannot be `EXPLAIN`ed** — the `explain` flag is intentionally only exposed on the read tools and the DML write tools (INSERT/UPDATE/DELETE), not on DDL.
 2. **`desc_table` output is a synthetic pseudo-`CREATE TABLE` string** built by one big `information_schema` SQL (`query_handlers.go`), not real DDL: primary keys only (guessed via `constraint_name LIKE '%_pkey'`), no indexes/FKs/defaults; result read via the `?column?` key (Postgres name for the unnamed computed column).
 3. **`select_query`/`insert_query` execute arbitrary SQL as given** — only the tool description constrains the LLM; the only enforcement is read-only mode for the write *tools*, not the statement type. "UPDATE must have WHERE" is description-only.
-4. **Read-only ≠ schema-only**: `select_query` has no SELECT-only restriction (unless the broken EXPLAIN check is enabled).
+4. **Read-only ≠ schema-only**: `select_query` has no SELECT-only restriction (it runs whatever SQL the caller passes).
 5. **`.github/workflows/docker-image.yml` builds a `Dockerfile` that doesn't exist** in the current tree — that workflow is currently broken.
 6. **`.gitignore` also ignores `.github/`**, `bin/`, `*.swp`, and generic leftovers (Composer, WordPress, `target/`) — the ignore file is boilerplate, not project-specific; `.github`/`bin/.gitkeep` are still tracked despite this.
 7. **Stray files**: `.README.md.swp` vim swap (gitignored), `.continue` (19-byte IDE artifact).
@@ -182,10 +181,33 @@ docker build . --file Dockerfile    # ⚠️ Dockerfile is NOT present in the cu
 - `run.sh` and all `testing/test-*.sh` scripts assume binary at `bin/postgres-server` and repo root one level up from `testing/`.
 - There is **no linter, no import ordering tool, no Makefile** — follow existing style (tabs, Go standard formatting).
 - Dependencies should stay minimal (3 runtime deps); the value proposition is "single binary, no other runtime".
-- If fixing `--with-explain-check`: real Postgres `EXPLAIN` uses a single `QUERY PLAN` text column (or `FORMAT JSON/YAML`), and cannot be applied to DDL — `select_query`/`count_query` pass statement types that the current code path can't meaningfully verify.
+- **`explain` flag semantics**: read tools use `EXPLAIN (ANALYZE, BUFFERS)` (safe — SELECT-only side effects) and append the plan *after* the results; DML write tools use plain `EXPLAIN` (no `ANALYZE`) and return *only* the plan — this is deliberate, `EXPLAIN (ANALYZE …)` would execute the INSERT/UPDATE/DELETE.
+- DDL tools (`create_table`/`alter_table`) have **no** `explain` flag — `EXPLAIN` cannot be applied to DDL.
 
 
 ## Update log
+
+### 2026-09-10 — removed hidden EXPLAIN gate; added per-call `explain` flag
+
+The `--with-explain-check` flag and its `HandleExplain`/`ExplainResult`/`StatementType*`
+mechanism were **removed**. The old pre-check was MySQL-shaped (`ExplainResult` scanned
+`select_type`/`key_len`/`ref`/`filtered` columns) and did not work against real Postgres,
+whose `EXPLAIN` emits a `QUERY PLAN` text column. The statement-type consts
+(`StatementTypeNoExplainCheck`/`Select`/`Insert`/`Update`/`Delete`) are gone; `DoQuery`/
+`HandleQuery`/`HandleExec` no longer take an `expect` parameter.
+
+In place of it, a new **optional boolean `explain` flag (default `false`)** is accepted
+per tool call:
+- `select_query` / `count_query`: when `true`, `ExplainPlan()` runs `EXPLAIN (ANALYZE,
+  BUFFERS)` and the plan is returned **alongside** the CSV results.
+- `insert_query` / `update_query` / `delete_query`: when `true`, `ExplainPlan()` runs plain
+  `EXPLAIN` (no `ANALYZE`, so the DML is **not executed**) and **only** the plan is returned.
+- `create_table` / `alter_table`: DDL cannot be `EXPLAIN`ed — no `explain` flag.
+
+New: `ExplainPlan()` and `parseBoolParam()` (`db.go`/`params.go`); removed the handler
+field `withExplainCheck`, `SetWithExplainCheck`, and the `--with-explain-check` CLI flag
+(`cmd/main.go`). `handleReadQuery` renamed to `handleSelectQuery`. All handler functions
+now pass only `(database, query)` to `DoQuery`/`HandleExec`.
 
 ### 2026-09-10 — added required `database` parameter per tool call
 
