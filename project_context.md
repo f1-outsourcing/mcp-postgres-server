@@ -36,6 +36,7 @@ pkg/handler/tools.go      # buildTools(): tool registry + read-only filter
 pkg/handler/params.go     # parseStringParam(), parseBoolParam(), isSQLIdentifier()
 pkg/handler/db.go         # Lazy DB pool, DoQuery/HandleQuery/HandleExec/ExplainPlan/MapToCSV
 pkg/handler/query_handlers.go   # list_tables, desc_table, select_query, count_query
+pkg/handler/inspect_handlers.go # list_functions, desc_function, list_triggers, desc_trigger, list_sequences
 pkg/handler/write_handlers.go   # create_table, alter_table, insert_query, update_query, delete_query
 pkg/handler/helpers.go    # textResponse() MCP response wrapper
 pkg/handler/handler_test.go     # Unit tests (stdlib-only, no DB)
@@ -61,10 +62,10 @@ go.mod / go.sum           # Dependencies
 | Symbol / File | Responsibility |
 |---|---|
 | `PostgresHandler` (`postgres.go`) | Holds `prefix`, `dsn`, `readOnly`, `db *sqlx.DB`, `dbPools`. Implements MCP `ListTools`/`CallTool`. `CallTool` strips an optional tool-name prefix (clients may or may not send prefixed names) then `switch`es to per-tool handlers; unknown tool ⇒ error. |
-| `buildTools()` (`tools.go`) | Declares all 9 tools with JSON-Schema `InputSchema` (raw JSON strings via `json.RawMessage`). In `--read-only` mode returns only the 4 read tools. Tool descriptions embed behavioral guidance for LLM callers (e.g. "must have WHERE", "call desc_table first"). |
+| `buildTools()` (`tools.go`) | Declares all 14 tools with JSON-Schema `InputSchema` (raw JSON strings via `json.RawMessage`). In `--read-only` mode returns only the 9 read/introspection tools. Tool descriptions embed behavioral guidance for LLM callers (e.g. "must have WHERE", "call desc_table first"). |
 | `parseStringParam()` (`params.go`) | Extracts a required non-empty string arg; defensively accepts `fmt.Stringer`. |
 | `parseBoolParam()` (`params.go`) | Extracts an optional boolean arg (unset/absent ⇒ false); used for the `explain` flag. |
-| `isSQLIdentifier()` (`params.go`) | Guard for bare identifier embedding (letters/digits/underscore, no leading digit). Used only for `name` params (`desc_table`, `count_query`). |
+| `isSQLIdentifier()` (`params.go`) | Guard for bare identifier embedding (letters/digits/underscore, no leading digit). Used for `table`/`function`/`trigger`/`schema` params before embedding in generated SQL. |
 | `DB()` (`db.go`) | **Lazy** connection: `sqlx.Connect("postgres", dsn)` on first use. `SetDB()` exists for tests. |
 | `HandleQuery()`/`DoQuery()` (`db.go`) | Execute, return rows as `[]map[string]interface{}` (with `[]byte`→`string` conversion) + headers; `HandleQuery` formats via `MapToCSV`. |
 | `HandleExec()` (`db.go`) | `db.Exec` for writes; returns "N rows affected". |
@@ -100,6 +101,7 @@ External:
 
 - **MCP tool**: name, description, JSON-Schema input; invoked via `tools/call`.
 - **Read tools (always available)**: `list_tables`, `desc_table`, `select_query`, `count_query`.
+- **Introspection tools (always available, for cross-DB diffing)**: `list_functions`, `desc_function`, `list_triggers`, `desc_trigger`, `list_sequences`. Use Postgres-native catalog functions (`pg_get_functiondef`, `pg_get_function_arguments`, `pg_get_triggerdef`, `pg_sequence`, `pg_trigger` bitflags). All list outputs are deterministically sorted so the agent can `diff` two databases reliably.
 - **Write tools (hidden by `--read-only`)**: `create_table`, `alter_table`, `insert_query` (INSERT), `update_query` (UPDATE), `delete_query` (DELETE).
 - **Read-only mode**: filtered in `buildTools()` *and* re-checked inside every write handler (double gate).
 - **Prefix**: optional tool-name prefix (`--prefix`); `CallTool` accepts both prefixed and bare names.
@@ -175,7 +177,7 @@ docker build . --file Dockerfile    # ⚠️ Dockerfile is NOT present in the cu
 ## Notes for AI Coding Agents
 
 - **Keep stdout protocol-clean**: anything you add must log to stderr via `slog`.
-- When **adding a tool**, touch all of: `buildTools()` in `tools.go`, the `switch` in `CallTool` (`postgres.go`), a new `handleX` in `query_handlers.go`/`write_handlers.go` (add read-only guard to write tools), the tool table in `README.md`, and an entry in `handler_test.go` if it affects tool counts (the RO test hardcodes 4/9).
+- When **adding a tool**, touch all of: `buildTools()` in `tools.go`, the `switch` in `CallTool` (`postgres.go`), a new `handleX` in `query_handlers.go`/`write_handlers.go` (add read-only guard to write tools), the tool table in `README.md`, and an entry in `handler_test.go` if it affects tool counts (the RO test hardcodes 14 RO / 9 RO+introspection).
 - **`go test ./...` must stay DB-free**; use `SetDB` only if you inject fakes.
 - Do **not** change `textResponse` shape or CSV format without checking client-side consumers.
 - `run.sh` and all `testing/test-*.sh` scripts assume binary at `bin/postgres-server` and repo root one level up from `testing/`.
@@ -186,6 +188,34 @@ docker build . --file Dockerfile    # ⚠️ Dockerfile is NOT present in the cu
 
 
 ## Update log
+
+### 2026-09-10 — added introspection tools (functions, triggers, sequences)
+
+Five new **always-available** read-only tools for cross-database comparison
+(mimicking the psql `\dfn`/`\ds`/`\d` output):
+
+| Tool | Equivalent of | Notes |
+|---|---|---|
+| `list_functions` | `\dfn` | Functions, procedures **and** aggregates/window fns (`pg_proc.prokind IN 'f','p','a','w'`), one line per overload, sorted |
+| `desc_function` | `\df+` | Full definition via `pg_get_functiondef()`; optional `args` resolves overloads |
+| `list_triggers` | trigger section of `\d` | Table triggers (via `pg_trigger` bitflags) **plus** database-level `pg_event_trigger` section |
+| `desc_trigger` | (none) | Full `CREATE TRIGGER` DDL via `pg_get_triggerdef()`, including the `WHEN` clause |
+| `list_sequences` | `\ds` | `pg_sequence` joined to `pg_class` |
+
+All new code lives in **`pkg/handler/inspect_handlers.go`** (new file, one flat
+package as everywhere else). Handlers follow the existing parse→query→text pattern
+and use `isSQLIdentifier` for any name/scheme/table/trigger/schema they embed in
+generated SQL. Tool count is now **14 total / 9 read-only** (was 9 / 4); the
+`TestReadOnlyToolFiltering` unit test was updated accordingly. `desc_function`
+intentionally rejects overloads without an explicit `args` and lists the available
+candidates so the caller can retry disambiguated.
+
+### 2026-09-10 — fixed `MapToCSV` build error
+
+`pkg/handler/db.go:204` had `for _, item := m` (missing `range`) — a
+syntax error introduced while rewriting this file. Correct line is
+`for _, item := range m`. The earlier suspicion in the notes that the
+loop was valid Go was wrong.
 
 ### 2026-09-10 — removed hidden EXPLAIN gate; added per-call `explain` flag
 

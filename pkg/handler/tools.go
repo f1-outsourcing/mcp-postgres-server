@@ -91,6 +91,113 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 				"required": ["database", "table"]
 			}`),
 		},
+		{
+			// Tool Definition
+			Name:        prefix + "list_functions",
+			Description: "List functions, procedures, aggregates and window functions in a schema (default: public, excludes schema-qualified names). One line per overload: kind, fully-qualified name, argument signature, return type, language, owner. Sorted for easy cross-database diffing",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to inspect"
+					},
+					"schema": {
+						"type": "string",
+						"description": "Optional schema name (default: public)"
+					}
+				},
+				"required": ["database"]
+			}`),
+		},
+		{
+			// Tool Definition
+			Name:        prefix + "desc_function",
+			Description: "Return the full definition (source code) of a single function or procedure, including volatibility, language and source. If the name has overloads, the list of available overload signatures is returned — re-call with `args` to pick one",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to inspect"
+					},
+					"function": {
+						"type": "string",
+						"description": "Name of the function or procedure (unqualified)"
+					},
+					"schema": {
+						"type": "string",
+						"description": "Optional schema name (default: public)"
+					},
+					"args": {
+						"type": "string",
+						"description": "Optional argument signature to disambiguate overloads, e.g. 'id integer'. Omit to list overloads instead"
+					}
+				},
+				"required": ["database", "function"]
+			}`),
+		},
+		{
+			// Tool Definition
+			Name:        prefix + "list_triggers",
+			Description: "List all table triggers (timing, scope, events, target function, enabled state), plus database-level event triggers. Restrict with `table` if needed. Sorted for easy cross-database diffing",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to inspect"
+					},
+					"table": {
+						"type": "string",
+						"description": "Optional table name; when set, only triggers on this table are listed"
+					}
+				},
+				"required": ["database"]
+			}`),
+		},
+		{
+			// Tool Definition
+			Name:        prefix + "desc_trigger",
+			Description: "Return the full DDL (CREATE TRIGGER statement, including the WHEN clause) of a single trigger on a table",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to inspect"
+					},
+					"table": {
+						"type": "string",
+						"description": "Name of the table the trigger is defined on"
+					},
+					"trigger": {
+						"type": "string",
+						"description": "Name of the trigger"
+					}
+				},
+				"required": ["database", "table", "trigger"]
+			}`),
+		},
+		{
+			// Tool Definition
+			Name:        prefix + "list_sequences",
+			Description: "List sequences in a schema (default: public) with their parameters (start, increment, min, max, cache, cycle). Sorted for easy cross-database diffing",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to inspect"
+					},
+					"schema": {
+						"type": "string",
+						"description": "Optional schema name (default: public)"
+					}
+				},
+				"required": ["database"]
+			}`),
+		},
 	}
 
 	if h.readOnly {

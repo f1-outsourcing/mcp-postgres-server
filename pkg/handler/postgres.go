@@ -77,6 +77,16 @@ func (h *PostgresHandler) CallTool(ctx context.Context, req *protocol.CallToolRe
 		return h.handleUpdateQuery(req.Arguments)
 	case "delete_query":
 		return h.handleDeleteQuery(req.Arguments)
+	case "list_functions":
+		return h.handleListFunctions(req.Arguments)
+	case "desc_function":
+		return h.handleDescFunction(req.Arguments)
+	case "list_triggers":
+		return h.handleListTriggers(req.Arguments)
+	case "desc_trigger":
+		return h.handleDescTrigger(req.Arguments)
+	case "list_sequences":
+		return h.handleListSequences(req.Arguments)
 	default:
 		return nil, fmt.Errorf("unknown tool: %s", req.Name)
 	}

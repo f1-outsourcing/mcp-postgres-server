@@ -5,7 +5,7 @@ No Node.js, Python, or other runtime required — download, configure the DSN, c
 
 ## Features
 
-- **9 tools** — full DDL + DML: list tables, describe, query, count, create, alter, insert, update, delete
+- **14 tools** — DDL + DML + introspection: list tables, describe, query, count, create, alter, insert, update, delete, list/desc functions, list/desc triggers, list sequences
 - **Read-only mode** — hide all write tools with a single flag
 - **Optional EXPLAIN** — opt in to the query plan per call (read tools: with results; write tools: preview without executing)
 - **CSV output** — all query results formatted as clean CSV
@@ -56,6 +56,14 @@ export PG_DSN="postgresql://user:pass@host:5432/mydb?sslmode=disable"
 - **`select_query`** — Execute a SELECT query. Param: `query`; optional `explain` (bool, default `false`) returns the `EXPLAIN ANALYZE` plan with the results
 - **`count_query`** — Get row count for a table. Param: `table`; optional `explain` (bool, default `false`)
 
+### Introspection (always available, for cross-database comparison)
+
+- **`list_functions`** — List functions, procedures, aggregates and window functions. Param: optional `schema` (default `public`). One line per overload (kind · name · args → return · language · owner), sorted
+- **`desc_function`** — Full definition of a function/procedure. Params: `function`, optional `schema`, optional `args` (to disambiguate overloads)
+- **`list_triggers`** — All table triggers (timing · scope · events → function · enabled), plus database-level event triggers. Param: optional `table`, sorted
+- **`desc_trigger`** — Full `CREATE TRIGGER` DDL (incl. `WHEN`). Params: `table`, `trigger`
+- **`list_sequences`** — Sequences with parameters (start/increment/min/max/cache/cycle). Param: optional `schema` (default `public`), sorted
+
 ### Write (hidden when `--read-only = true`)
 
 - **`create_table`** — Execute DDL to create a table. Param: `query`
@@ -104,10 +112,11 @@ Each integration test spawns the server, sends a JSON-RPC `tools/call`, and vali
 │   └── main.go          # Entry point: flags, logging, server start
 ├── pkg/handler/
 │   ├── postgres.go      # Handler struct + CallTool router
-│   ├── tools.go         # Tool registry (9 tools, read-only filter)
+│   ├── tools.go         # Tool registry (14 tools, read-only filter)
 │   ├── params.go        # parseStringParam + isSQLIdentifier helpers
 │   ├── db.go            # DB pool, DoQuery, HandleExec, ExplainPlan, MapToCSV
 │   ├── query_handlers.go# 4 read handlers
+│   ├── inspect_handlers.go # 5 introspection handlers (functions, triggers, sequences)
 │   ├── write_handlers.go# 5 write handlers
 │   ├── helpers.go       # textResponse wrapper
 │   └── handler_test.go  # Unit tests (stdlib only, no DB)

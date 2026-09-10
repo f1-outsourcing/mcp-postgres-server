@@ -20,8 +20,8 @@ func TestReadOnlyToolFiltering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools failed: %v", err)
 	}
-	if got := len(resp.Tools); got != 9 {
-		t.Errorf("rw mode: expected 9 tools, got %d", got)
+	if got := len(resp.Tools); got != 14 {
+		t.Errorf("rw mode: expected 14 tools, got %d", got)
 	}
 
 	h.SetReadOnly(true)
@@ -30,8 +30,8 @@ func TestReadOnlyToolFiltering(t *testing.T) {
 		t.Fatalf("ListTools failed: %v", err)
 	}
 	tools := resp.Tools
-	if len(tools) != 4 {
-		t.Fatalf("ro mode: expected 4 tools, got %d", len(tools))
+	if len(tools) != 9 {
+		t.Fatalf("ro mode: expected 9 tools, got %d", len(tools))
 	}
 
 	names := map[string]bool{}
@@ -41,6 +41,7 @@ func TestReadOnlyToolFiltering(t *testing.T) {
 
 	for _, name := range []string{
 		"list_tables", "desc_table", "select_query", "count_query",
+		"list_functions", "desc_function", "list_triggers", "desc_trigger", "list_sequences",
 	} {
 		if !names[name] {
 			t.Errorf("ro mode: missing read-only tool: %s", name)
