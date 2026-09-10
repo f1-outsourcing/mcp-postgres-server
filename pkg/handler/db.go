@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/csv"
 	"fmt"
+	"net/url"
 	"strings"
 
 	_ "github.com/lib/pq"
@@ -38,25 +39,51 @@ func (h *PostgresHandler) SetDB(db *sqlx.DB) {
 	h.db = db
 }
 
-// DB returns the shared connection pool, establishing it lazily from the configured DSN
-func (h *PostgresHandler) DB() (*sqlx.DB, error) {
+// replaceDatabaseName returns the dsn with its database (url path) segment
+// replaced by dbName, preserving any other url components (query params, etc.).
+// DSNs without a url path are returned unchanged.
+func replaceDatabaseName(dsn, dbName string) string {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return dsn
+	}
+	if !(u.Scheme == "postgres" || u.Scheme == "postgresql") {
+		return dsn
+	}
+	u.Path = "/" + dbName
+	return u.String()
+}
+
+// DB returns a shared connection pool for the given database, establishing it
+// lazily by swapping the database name out of the configured DSN. Pools are
+// keyed by database name so multiple databases can coexist within the process.
+func (h *PostgresHandler) DB(dbName string) (*sqlx.DB, error) {
+	// A single injected pool (see SetDB) short-circuits per-db pooling — tests only.
 	if h.db != nil {
 		return h.db, nil
 	}
 
-	db, err := sqlx.Connect("postgres", h.dsn)
+	if h.dbPools == nil {
+		h.dbPools = map[string]*sqlx.DB{}
+	}
+	if pool, ok := h.dbPools[dbName]; ok {
+		return pool, nil
+	}
+
+	poolDsn := replaceDatabaseName(h.dsn, dbName)
+	db, err := sqlx.Connect("postgres", poolDsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish database connection: %v", err)
 	}
 
-	h.db = db
+	h.dbPools[dbName] = db
 
 	return db, nil
 }
 
 // HandleQuery runs a query and returns the result as CSV
-func (h *PostgresHandler) HandleQuery(query, expect string) (string, error) {
-	result, headers, err := h.DoQuery(query, expect)
+func (h *PostgresHandler) HandleQuery(dbName, query, expect string) (string, error) {
+	result, headers, err := h.DoQuery(dbName, query, expect)
 	if err != nil {
 		return "", err
 	}
@@ -70,14 +97,14 @@ func (h *PostgresHandler) HandleQuery(query, expect string) (string, error) {
 }
 
 // DoQuery runs a query and returns the raw result rows with their column headers
-func (h *PostgresHandler) DoQuery(query, expect string) ([]map[string]interface{}, []string, error) {
-	db, err := h.DB()
+func (h *PostgresHandler) DoQuery(dbName, query, expect string) ([]map[string]interface{}, []string, error) {
+	db, err := h.DB(dbName)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	if len(expect) > 0 {
-		if err := h.HandleExplain(query, expect); err != nil {
+		if err := h.HandleExplain(dbName, query, expect); err != nil {
 			return nil, nil, err
 		}
 	}
@@ -115,14 +142,14 @@ func (h *PostgresHandler) DoQuery(query, expect string) ([]map[string]interface{
 }
 
 // HandleExec runs a write statement and reports how many rows were affected
-func (h *PostgresHandler) HandleExec(query, expect string) (string, error) {
-	db, err := h.DB()
+func (h *PostgresHandler) HandleExec(dbName, query, expect string) (string, error) {
+	db, err := h.DB(dbName)
 	if err != nil {
 		return "", err
 	}
 
 	if len(expect) > 0 {
-		if err := h.HandleExplain(query, expect); err != nil {
+		if err := h.HandleExplain(dbName, query, expect); err != nil {
 			return "", err
 		}
 	}
@@ -151,12 +178,12 @@ func (h *PostgresHandler) HandleExec(query, expect string) (string, error) {
 }
 
 // HandleExplain checks the query plan of the given query matches the expected statement type
-func (h *PostgresHandler) HandleExplain(query, expect string) error {
+func (h *PostgresHandler) HandleExplain(dbName, query, expect string) error {
 	if !h.withExplainCheck {
 		return nil
 	}
 
-	db, err := h.DB()
+	db, err := h.DB(dbName)
 	if err != nil {
 		return err
 	}

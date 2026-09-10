@@ -10,7 +10,12 @@ import (
 
 // handleListTable lists public-schema tables one per line, no CSV header.
 func (h *PostgresHandler) handleListTable(args map[string]interface{}) (*protocol.CallToolResponse, error) {
-	rows, _, err := h.DoQuery("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;", StatementTypeNoExplainCheck)
+	database, err := parseStringParam(args, "database")
+	if err != nil {
+		return nil, err
+	}
+
+	rows, _, err := h.DoQuery(database, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;", StatementTypeNoExplainCheck)
 	if err != nil {
 		return nil, fmt.Errorf("list_table: %w", err)
 	}
@@ -26,6 +31,11 @@ func (h *PostgresHandler) handleListTable(args map[string]interface{}) (*protoco
 }
 
 func (h *PostgresHandler) handleDescTable(args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	database, err := parseStringParam(args, "database")
+	if err != nil {
+		return nil, err
+	}
+
 	name, err := parseStringParam(args, "name")
 	if err != nil {
 		return nil, err
@@ -65,7 +75,7 @@ WHERE
 GROUP BY
     t.table_name;`
 
-	rows, _, err := h.DoQuery(descsql, StatementTypeNoExplainCheck)
+	rows, _, err := h.DoQuery(database, descsql, StatementTypeNoExplainCheck)
 	if err != nil {
 		return nil, fmt.Errorf("desc_table: %w", err)
 	}
@@ -78,12 +88,17 @@ GROUP BY
 }
 
 func (h *PostgresHandler) handleReadQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	database, err := parseStringParam(args, "database")
+	if err != nil {
+		return nil, err
+	}
+
 	query, err := parseStringParam(args, "query")
 	if err != nil {
 		return nil, err
 	}
 
-	result, err := h.HandleQuery(query, StatementTypeSelect)
+	result, err := h.HandleQuery(database, query, StatementTypeSelect)
 	if err != nil {
 		return nil, fmt.Errorf("read_query: %w", err)
 	}
@@ -92,6 +107,11 @@ func (h *PostgresHandler) handleReadQuery(args map[string]interface{}) (*protoco
 }
 
 func (h *PostgresHandler) handleCountQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	database, err := parseStringParam(args, "database")
+	if err != nil {
+		return nil, err
+	}
+
 	name, err := parseStringParam(args, "name")
 	if err != nil {
 		return nil, err
@@ -102,7 +122,7 @@ func (h *PostgresHandler) handleCountQuery(args map[string]interface{}) (*protoc
 		return nil, fmt.Errorf("invalid table name: %s", name)
 	}
 
-	result, err := h.HandleQuery("SELECT count(1) from "+name+";", StatementTypeNoExplainCheck)
+	result, err := h.HandleQuery(database, "SELECT count(1) from "+name+";", StatementTypeNoExplainCheck)
 	if err != nil {
 		return nil, fmt.Errorf("count_query: %w", err)
 	}

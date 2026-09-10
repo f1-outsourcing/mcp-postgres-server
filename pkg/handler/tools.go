@@ -17,8 +17,13 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 			Description: "List all tables in the public schema (pg_catalog and information_schema are excluded)",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
-				"properties": {},
-				"required": []
+				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to run the query against"
+					}
+				},
+				"required": ["database"]
 			}`),
 		},
 		{
@@ -28,12 +33,16 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to run the query against"
+					},
 					"name": {
 						"type": "string",
 						"description": "Name of the table"
 					}
 				},
-				"required": ["name"]
+				"required": ["database", "name"]
 			}`),
 		},
 		{
@@ -43,12 +52,16 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to run the query against"
+					},
 					"query": {
 						"type": "string",
 						"description": "The SQL query to execute"
 					}
 				},
-				"required": ["query"]
+				"required": ["database", "query"]
 			}`),
 		},
 		{
@@ -58,12 +71,16 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to run the query against"
+					},
 					"name": {
 						"type": "string",
 						"description": "Name of the table"
 					}
 				},
-				"required": ["name"]
+				"required": ["database", "name"]
 			}`),
 		},
 	}
@@ -79,12 +96,16 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to run the query against"
+					},
 					"query": {
 						"type": "string",
 						"description": "The SQL query to execute"
 					}
 				},
-				"required": ["query"]
+				"required": ["database", "query"]
 			}`),
 		},
 		protocol.Tool{
@@ -93,12 +114,16 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to run the query against"
+					},
 					"query": {
 						"type": "string",
 						"description": "The SQL query to execute"
 					}
 				},
-				"required": ["query"]
+				"required": ["database", "query"]
 			}`),
 		},
 		protocol.Tool{
@@ -107,12 +132,16 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to run the query against"
+					},
 					"query": {
 						"type": "string",
 						"description": "The SQL query to execute"
 					}
 				},
-				"required": ["query"]
+				"required": ["database", "query"]
 			}`),
 		},
 		protocol.Tool{
@@ -121,12 +150,16 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to run the query against"
+					},
 					"query": {
 						"type": "string",
 						"description": "The SQL query to execute"
 					}
 				},
-				"required": ["query"]
+				"required": ["database", "query"]
 			}`),
 		},
 		protocol.Tool{
@@ -135,12 +168,16 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to run the query against"
+					},
 					"query": {
 						"type": "string",
 						"description": "The SQL query to execute"
 					}
 				},
-				"required": ["query"]
+				"required": ["database", "query"]
 			}`),
 		},
 	)

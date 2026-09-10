@@ -17,6 +17,7 @@ type PostgresHandler struct {
 	readOnly         bool
 	withExplainCheck bool
 	db               *sqlx.DB
+	dbPools          map[string]*sqlx.DB
 }
 
 // NewPostgresHandler creates a new postgres handler with default prefix

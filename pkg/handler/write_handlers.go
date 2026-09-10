@@ -10,6 +10,11 @@ import (
 // note: these handlers only take effect when the handler is not in read-only mode.
 
 func (h *PostgresHandler) handleCreateTable(args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	database, err := parseStringParam(args, "database")
+	if err != nil {
+		return nil, err
+	}
+
 	query, err := parseStringParam(args, "query")
 	if err != nil {
 		return nil, err
@@ -20,7 +25,7 @@ func (h *PostgresHandler) handleCreateTable(args map[string]interface{}) (*proto
 		return nil, fmt.Errorf("create_table: server is read-only, cannot execute write operations")
 	}
 
-	result, err := h.HandleExec(query, StatementTypeNoExplainCheck)
+	result, err := h.HandleExec(database, query, StatementTypeNoExplainCheck)
 	if err != nil {
 		slog.Error("create_table - failed", "error", err)
 		return nil, fmt.Errorf("create_table: %w", err)
@@ -30,6 +35,11 @@ func (h *PostgresHandler) handleCreateTable(args map[string]interface{}) (*proto
 }
 
 func (h *PostgresHandler) handleAlterTable(args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	database, err := parseStringParam(args, "database")
+	if err != nil {
+		return nil, err
+	}
+
 	query, err := parseStringParam(args, "query")
 	if err != nil {
 		return nil, err
@@ -40,7 +50,7 @@ func (h *PostgresHandler) handleAlterTable(args map[string]interface{}) (*protoc
 		return nil, fmt.Errorf("alter_table: server is read-only, cannot execute write operations")
 	}
 
-	result, err := h.HandleExec(query, StatementTypeNoExplainCheck)
+	result, err := h.HandleExec(database, query, StatementTypeNoExplainCheck)
 	if err != nil {
 		slog.Error("alter_table - failed", "error", err)
 		return nil, fmt.Errorf("alter_table: %w", err)
@@ -50,6 +60,11 @@ func (h *PostgresHandler) handleAlterTable(args map[string]interface{}) (*protoc
 }
 
 func (h *PostgresHandler) handleWriteQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	database, err := parseStringParam(args, "database")
+	if err != nil {
+		return nil, err
+	}
+
 	query, err := parseStringParam(args, "query")
 	if err != nil {
 		return nil, err
@@ -60,7 +75,7 @@ func (h *PostgresHandler) handleWriteQuery(args map[string]interface{}) (*protoc
 		return nil, fmt.Errorf("write_query: server is read-only, cannot execute write operations")
 	}
 
-	result, err := h.HandleExec(query, StatementTypeInsert)
+	result, err := h.HandleExec(database, query, StatementTypeInsert)
 	if err != nil {
 		slog.Error("write_query - failed", "error", err)
 		return nil, fmt.Errorf("write_query: %w", err)
@@ -70,6 +85,11 @@ func (h *PostgresHandler) handleWriteQuery(args map[string]interface{}) (*protoc
 }
 
 func (h *PostgresHandler) handleUpdateQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	database, err := parseStringParam(args, "database")
+	if err != nil {
+		return nil, err
+	}
+
 	query, err := parseStringParam(args, "query")
 	if err != nil {
 		return nil, err
@@ -80,7 +100,7 @@ func (h *PostgresHandler) handleUpdateQuery(args map[string]interface{}) (*proto
 		return nil, fmt.Errorf("update_query: server is read-only, cannot execute write operations")
 	}
 
-	result, err := h.HandleExec(query, StatementTypeUpdate)
+	result, err := h.HandleExec(database, query, StatementTypeUpdate)
 	if err != nil {
 		slog.Error("update_query - failed", "error", err)
 		return nil, fmt.Errorf("update_query: %w", err)
@@ -90,6 +110,11 @@ func (h *PostgresHandler) handleUpdateQuery(args map[string]interface{}) (*proto
 }
 
 func (h *PostgresHandler) handleDeleteQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	database, err := parseStringParam(args, "database")
+	if err != nil {
+		return nil, err
+	}
+
 	query, err := parseStringParam(args, "query")
 	if err != nil {
 		return nil, err
@@ -100,7 +125,7 @@ func (h *PostgresHandler) handleDeleteQuery(args map[string]interface{}) (*proto
 		return nil, fmt.Errorf("delete_query: server is read-only, cannot execute write operations")
 	}
 
-	result, err := h.HandleExec(query, StatementTypeDelete)
+	result, err := h.HandleExec(database, query, StatementTypeDelete)
 	if err != nil {
 		slog.Error("delete_query - failed", "error", err)
 		return nil, fmt.Errorf("delete_query: %w", err)

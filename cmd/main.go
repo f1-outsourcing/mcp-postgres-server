@@ -69,11 +69,14 @@ func main() {
 	registry := handler.NewHandlerRegistry()
 	registry.RegisterToolHandler(pgHandler)
 
-	// Create and start server
+	// Create and start server. We inject a line-based stdio transport so each
+	// input line is treated as one JSON-RPC message: a single malformed line is
+	// answered with a JSON-RPC error and never breaks processing of the next line.
 	srv := server.New(server.Options{
-		Name:     "mcp-postgres-server",
-		Version:  version,
-		Registry: registry,
+		Name:      "mcp-postgres-server",
+		Version:   version,
+		Registry:  registry,
+		Transport: newLineStdioTransport(),
 	})
 
 	slog.Info("Starting postgres server", "prefix", *prefix)
