@@ -402,3 +402,32 @@ Gaps to close (for a future change, not now):
 4. Verify live: single-statement `CREATE PROCEDURE` (both dialects) and
    two-statement trigger function+trigger on Postgres/MariaDB before committing
    to any approach.
+### 2026-09-11 — added `create_function` and `create_trigger` tools
+
+Two new **write tools** (hidden in `--read-only` mode), added alongside the
+existing `create_table`/`alter_table` DDL tools:
+
+| Tool | Purpose |
+|---|---|
+| `create_function` | `CREATE [OR REPLACE] FUNCTION` **or** `CREATE [OR REPLACE] PROCEDURE` (single statement, works on both Postgres and MariaDB) |
+| `create_trigger`  | `CREATE TRIGGER` (single statement; handler function **must** already exist — call `create_function` first) |
+
+**Files changed:**
+- `tools.go` — tool definitions appended after `delete_query` in the write-tools block; descriptions include the "call `create_function` first" cross-reference
+- `write_handlers.go` — `handleCreateFunction` and `handleCreateTrigger` (~50 lines, identical structure to `handleCreateTable`/`handleAlterTable`)
+- `postgres.go` — `CallTool` switch cases for both tools
+- `handler_test.go` — expected RW count updated 14 → 16; both names added to the RO exclusion list
+
+**Design notes:**
+- No `explain` flag (DDL can't be `EXPLAIN`ed, consistent with `create_table`/`alter_table`)
+- Each tool runs exactly **one** `db.Exec` call — no multi-statement issue
+- `create_function` handles both `FUNCTION` and `PROCEDURE` (one tool, no split — avoids adding tool noise for a small use-case distinction)
+- `create_trigger` expects the handler function to already exist; the description tells the LLM to call `create_function` first
+
+**Tool count:** 16 total (was 14) / 9 read-only (unchanged).
+
+**New integration tests** (`testing/`, added to `run-all-tests.sh` before teardown):
+- `test-create_function.sh` — calls `create_function` on both dialects with `CREATE OR REPLACE FUNCTION cf_probe` (idempotent), best-effort CLI cleanup.
+- `test-create_trigger.sh` — validates the documented flow: PG does `create_function` (handler `ctg_probe_fn`) → `create_trigger` (single `CREATE TRIGGER … EXECUTE FUNCTION`); MariaDB does a single inline-body `CREATE TRIGGER`. Each `create_trigger` call stays a **single** statement (no multi-statement); idempotency via guarded DB-CLI `DROP` first (mirrors `test-seed.sh`). Self-cleanup at the end.
+
+Note: these require a live Postgres + MariaDB (via `common.sh` DSNs), like the other integration tests. Run `bash testing/test-create_function.sh` / `bash testing/test-create_trigger.sh` directly, or via `run-all-tests.sh`.

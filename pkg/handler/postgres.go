@@ -83,6 +83,10 @@ func (h *PostgresHandler) CallTool(ctx context.Context, req *protocol.CallToolRe
 		return h.handleUpdateQuery(req.Arguments)
 	case "delete_query":
 		return h.handleDeleteQuery(req.Arguments)
+	case "create_function":
+		return h.handleCreateFunction(req.Arguments)
+	case "create_trigger":
+		return h.handleCreateTrigger(req.Arguments)
 	case "list_functions":
 		return h.handleListFunctions(req.Arguments)
 	case "desc_function":

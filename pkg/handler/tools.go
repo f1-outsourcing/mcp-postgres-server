@@ -307,6 +307,42 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 				"required": ["database", "query"]
 			}`),
 		},
+		protocol.Tool{
+			Name:        prefix + "create_function",
+			Description: "Create a stored function or procedure (CREATE [OR REPLACE] FUNCTION / PROCEDURE). Provide the full DDL. For triggers, call this tool FIRST to create the handler function, then call `create_trigger`",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to run the query against"
+					},
+					"query": {
+						"type": "string",
+						"description": "The full CREATE [OR REPLACE] FUNCTION or CREATE [OR REPLACE] PROCEDURE statement"
+					}
+				},
+				"required": ["database", "query"]
+			}`),
+		},
+		protocol.Tool{
+			Name:        prefix + "create_trigger",
+			Description: "Create a trigger on a table (CREATE TRIGGER). The handler function MUST already exist — call `create_function` first if it does not. Provide the full CREATE TRIGGER statement",
+			InputSchema: json.RawMessage(`{
+				"type": "object",
+				"properties": {
+					"database": {
+						"type": "string",
+						"description": "Name of the database to run the query against"
+					},
+					"query": {
+						"type": "string",
+						"description": "The full CREATE TRIGGER statement"
+					}
+				},
+				"required": ["database", "query"]
+			}`),
+		},
 	)
 
 	return t

@@ -31,7 +31,9 @@ TESTS=(
     test-list_functions.sh   # asserts f_probe is detected
     test-list_triggers.sh    # asserts trg_probe is detected
     test-list_sequences.sh   # asserts seq_probe is detected
-    test-teardown.sh         # drop the fixtures (safe to run even if seed failed)
+    test-create_function.sh  # exercises create_function (own cf_probe fixture)
+    test-create_trigger.sh   # exercises create_trigger (own ctg_probe fixture)
+    test-teardown.sh         # drop the seed fixtures (safe to run even if seed failed)
 )
 
 # Drop any that are missing on disk

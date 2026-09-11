@@ -20,8 +20,8 @@ func TestReadOnlyToolFiltering(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTools failed: %v", err)
 	}
-	if got := len(resp.Tools); got != 14 {
-		t.Errorf("rw mode: expected 14 tools, got %d", got)
+	if got := len(resp.Tools); got != 16 {
+		t.Errorf("rw mode: expected 16 tools, got %d", got)
 	}
 
 	h.SetReadOnly(true)
@@ -51,6 +51,7 @@ func TestReadOnlyToolFiltering(t *testing.T) {
 	for _, name := range []string{
 		"create_table", "alter_table", "insert_query",
 		"update_query", "delete_query",
+		"create_function", "create_trigger",
 	} {
 		if names[name] {
 			t.Errorf("ro mode: unexpected write tool: %s", name)

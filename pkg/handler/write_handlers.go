@@ -59,6 +59,56 @@ func (h *PostgresHandler) handleAlterTable(args map[string]interface{}) (*protoc
 	return textResponse(result), nil
 }
 
+func (h *PostgresHandler) handleCreateFunction(args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	database, err := parseStringParam(args, "database")
+	if err != nil {
+		return nil, err
+	}
+
+	query, err := parseStringParam(args, "query")
+	if err != nil {
+		return nil, err
+	}
+
+	if h.readOnly {
+		slog.Error("create_function - server is read-only")
+		return nil, fmt.Errorf("create_function: server is read-only, cannot execute write operations")
+	}
+
+	result, err := h.HandleExec(database, query)
+	if err != nil {
+		slog.Error("create_function - failed", "error", err)
+		return nil, fmt.Errorf("create_function: %w", err)
+	}
+
+	return textResponse(result), nil
+}
+
+func (h *PostgresHandler) handleCreateTrigger(args map[string]interface{}) (*protocol.CallToolResponse, error) {
+	database, err := parseStringParam(args, "database")
+	if err != nil {
+		return nil, err
+	}
+
+	query, err := parseStringParam(args, "query")
+	if err != nil {
+		return nil, err
+	}
+
+	if h.readOnly {
+		slog.Error("create_trigger - server is read-only")
+		return nil, fmt.Errorf("create_trigger: server is read-only, cannot execute write operations")
+	}
+
+	result, err := h.HandleExec(database, query)
+	if err != nil {
+		slog.Error("create_trigger - failed", "error", err)
+		return nil, fmt.Errorf("create_trigger: %w", err)
+	}
+
+	return textResponse(result), nil
+}
+
 func (h *PostgresHandler) handleInsertQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {
 	return h.runDLQuery(args, "insert_query")
 }
