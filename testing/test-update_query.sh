@@ -1,37 +1,32 @@
 #!/bin/bash
-# Test script for update_query tool (no-op smoke test)
-set -e
+# ==============================================================================
+# test-update_query.sh — update_query tool (no-op WHERE 1=0) (both dialects)
+#
+# Usage: bash test-update_query.sh   (uses alter_table's table — run that first)
+# ==============================================================================
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+do_test() {
+    local label="$1" dsn="$2" db="$3"
+    section "update_query → no-op WHERE 1=0 [$label]"
+    local q payload resp
+    q="UPDATE ${db} SET id=id WHERE 1=0"
+    payload=$(printf '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"update_query","arguments":{"database":"%s","query":"%s"}},"id":7}' "$db" "$q")
+    resp=$(mcp_call "$dsn" "$payload")
 
-if [ -z "$PG_DSN" ]; then
-    echo "⏭️  SKIPPED: PG_DSN not set"
-    exit 0
-fi
+    if ! check_envelope "update_query [$label]" "$resp"; then
+        return
+    fi
+    if echo "$resp" | jq -e '.result.content[0].type=="text"' >/dev/null 2>&1; then
+        pass "update_query → write path OK (0 rows updated)"
+    elif echo "$resp" | jq -e '.error' >/dev/null 2>&1; then
+        fail "update_query → MCP error: $(echo "$resp" | jq -r '.error.message // .error' 2>/dev/null | head -1)"
+    else
+        fail "update_query → no result and no error"
+    fi
+}
 
-cd "$SCRIPT_DIR/../"
-[ -f "bin/postgres-server" ] || go build -o bin/postgres-server ./cmd
-cd "$SCRIPT_DIR"
+do_test "PostgreSQL" "$PG_DSN" "$PG_DB"
+do_test "MariaDB"    "$MARIADB_DSN" "$MARIADB_DB"
 
-echo "=== Testing update_query ==="
-
-# Use a harmless UPDATE with 0-row WHERE clause
-RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"update_query","arguments":{"query":"UPDATE _mcp_smoke_test SET id = 1 WHERE 1=0"}},"id":8}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
-
-echo "Raw response: $RESPONSE"
-
-echo "$RESPONSE" | jq -e '.jsonrpc == "2.0"' > /dev/null 2>&1 && echo "✓ Valid JSON-RPC" || exit 1
-echo "$RESPONSE" | jq -e '.id == 8' > /dev/null 2>&1 && echo "✓ ID preserved" || exit 1
-
-# Accept result OR error
-if echo "$RESPONSE" | jq -e '.result' > /dev/null 2>&1; then
-    echo "✓ Got MCP result (update executed)"
-elif echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
-    echo "✓ Got MCP error (table not yet created — expected smoke test)"
-else
-    echo "✗ No valid result or error"
-    exit 1
-fi
-
-echo ""
-echo "=== update_query test PASSED ==="
+summary "UPDATE_QUERY TEST"

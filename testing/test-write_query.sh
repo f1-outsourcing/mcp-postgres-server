@@ -1,37 +1,32 @@
 #!/bin/bash
-# Test script for insert_query tool (DDL smoke test)
-set -e
+# ==============================================================================
+# test-write_query.sh — insert_query tool (safe 0-row insert) (both dialects)
+#
+# Usage: bash test-write_query.sh   (uses alter_table's table — run that first)
+# ==============================================================================
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+do_test() {
+    local label="$1" dsn="$2" db="$3"
+    section "insert_query → 0-row safe insert [$label]"
+    local q payload resp
+    q="INSERT INTO ${db}(id) SELECT id FROM ${db} WHERE 1=0"
+    payload=$(printf '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"insert_query","arguments":{"database":"%s","query":"%s"}},"id":6}' "$db" "$q")
+    resp=$(mcp_call "$dsn" "$payload")
 
-if [ -z "$PG_DSN" ]; then
-    echo "⏭️  SKIPPED: PG_DSN not set"
-    exit 0
-fi
+    if ! check_envelope "insert_query [$label]" "$resp"; then
+        return
+    fi
+    if echo "$resp" | jq -e '.result.content[0].type=="text"' >/dev/null 2>&1; then
+        pass "insert_query → write path OK (0 rows affected)"
+    elif echo "$resp" | jq -e '.error' >/dev/null 2>&1; then
+        fail "insert_query → MCP error: $(echo "$resp" | jq -r '.error.message // .error' 2>/dev/null | head -1)"
+    else
+        fail "insert_query → no result and no error"
+    fi
+}
 
-cd "$SCRIPT_DIR/../"
-[ -f "bin/postgres-server" ] || go build -o bin/postgres-server ./cmd
-cd "$SCRIPT_DIR"
+do_test "PostgreSQL" "$PG_DSN" "$PG_DB"
+do_test "MariaDB"    "$MARIADB_DSN" "$MARIADB_DB"
 
-echo "=== Testing insert_query ==="
-
-# Use a safe DDL statement that won't fail on most databases
-RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"insert_query","arguments":{"query":"CREATE TABLE IF NOT EXISTS _mcp_smoke_test(id INT)"}},"id":6}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
-
-echo "Raw response: $RESPONSE"
-
-echo "$RESPONSE" | jq -e '.jsonrpc == "2.0"' > /dev/null 2>&1 && echo "✓ Valid JSON-RPC" || exit 1
-echo "$RESPONSE" | jq -e '.id == 6' > /dev/null 2>&1 && echo "✓ ID preserved" || exit 1
-
-# Accept result OR error — MCP plumbing test
-if echo "$RESPONSE" | jq -e '.result' > /dev/null 2>&1; then
-    echo "✓ Got MCP result (write succeeded)"
-elif echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
-    echo "✓ Got MCP error (write failed, e.g. permission — expected smoke test)"
-else
-    echo "✗ No valid result or error"
-    exit 1
-fi
-
-echo ""
-echo "=== insert_query test PASSED ==="
+summary "INSERT_QUERY TEST"

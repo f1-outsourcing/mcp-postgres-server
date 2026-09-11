@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	"github.com/jmoiron/sqlx"
 )
@@ -17,17 +18,58 @@ func (h *PostgresHandler) SetDB(db *sqlx.DB) {
 
 // replaceDatabaseName returns the dsn with its database (url path) segment
 // replaced by dbName, preserving any other url components (query params, etc.).
-// DSNs without a url path are returned unchanged.
-func replaceDatabaseName(dsn, dbName string) string {
+// DSNs whose scheme is not recognized as a supported dialect are returned
+// unchanged.
+func replaceDatabaseName(d Dialect, dsn, dbName string) string {
 	u, err := url.Parse(dsn)
 	if err != nil {
 		return dsn
 	}
-	if !(u.Scheme == "postgres" || u.Scheme == "postgresql") {
-		return dsn
+	switch d {
+	case DialectPostgres:
+		if u.Scheme != "postgres" && u.Scheme != "postgresql" {
+			return dsn
+		}
+	case DialectMariadb:
+		if u.Scheme != "mysql" && u.Scheme != "mariadb" {
+			return dsn
+		}
 	}
 	u.Path = "/" + dbName
 	return u.String()
+}
+
+// toMariaDBDSN converts a URL-style DSN (mysql://user:pass@host:port/db)
+// into the format go-sql-driver/mysql expects: user:pass@tcp(host:port)/db.
+// The driver's own parser (ParseDSN in dsn.go) does not understand URL schemes;
+// it finds the last '/', looks left for '@' and expects [protocol[(addr)]] with
+// an optional parenthesised address. URL DSNs have no parentheses, so the
+// driver sees an empty net and returns "default addr for network '' unknown".
+func toMariaDBDSN(dsn string) string {
+	u, err := url.Parse(dsn)
+	if err != nil || u.Scheme == "" {
+		return dsn
+	}
+	host := u.Hostname()
+	port := u.Port()
+	if port == "" {
+		port = "3306"
+	}
+	user := u.User.Username()
+	if pw, ok := u.User.Password(); ok {
+		return fmt.Sprintf("%s:%s@tcp(%s:%s)%s", user, pw, host, port, u.Path)
+	}
+	return fmt.Sprintf("%s@tcp(%s:%s)%s", user, host, port, u.Path)
+}
+
+// driverName returns the sqlx driver name for a dialect.
+func driverName(d Dialect) string {
+	switch d {
+	case DialectMariadb:
+		return "mysql"
+	default:
+		return "postgres"
+	}
 }
 
 // DB returns a shared connection pool for the given database, establishing it
@@ -46,8 +88,11 @@ func (h *PostgresHandler) DB(dbName string) (*sqlx.DB, error) {
 		return pool, nil
 	}
 
-	poolDsn := replaceDatabaseName(h.dsn, dbName)
-	db, err := sqlx.Connect("postgres", poolDsn)
+	poolDsn := replaceDatabaseName(h.dialect, h.dsn, dbName)
+	if h.dialect == DialectMariadb {
+		poolDsn = toMariaDBDSN(poolDsn)
+	}
+	db, err := sqlx.Connect(driverName(h.dialect), poolDsn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish database connection: %v", err)
 	}
@@ -143,11 +188,19 @@ func (h *PostgresHandler) ExplainPlan(dbName, query string, analyze bool) (strin
 		return "", err
 	}
 
-	verb := "EXPLAIN "
-	if analyze {
-		verb = "EXPLAIN (ANALYZE, BUFFERS) "
+	var stmt string
+	switch {
+	case h.dialect == DialectMariadb && analyze:
+		// MariaDB: EXPLAIN ANALYZE actually runs the statement (read tools OK,
+		// write tools never call this with analyze=true).
+		stmt = "EXPLAIN ANALYZE " + query
+	case h.dialect == DialectMariadb:
+		stmt = "EXPLAIN " + query
+	case analyze:
+		stmt = "EXPLAIN (ANALYZE, BUFFERS) " + query
+	default:
+		stmt = "EXPLAIN " + query
 	}
-	stmt := verb + query
 
 	rows, err := db.Queryx(stmt)
 	if err != nil {
@@ -207,6 +260,10 @@ func MapToCSV(m []map[string]interface{}, headers []string) (string, error) {
 			value, exists := item[header]
 			if !exists {
 				return "", fmt.Errorf("key '%s' not found in map", header)
+			}
+			if value == nil {
+				row[i] = "NULL"
+				continue
 			}
 			row[i] = fmt.Sprintf("%v", value)
 		}

@@ -1,11 +1,13 @@
-# Postgres MCP Server
+# MCP Database Server (PostgreSQL + MariaDB)
 
-A single-binary MCP server for PostgreSQL, powered by the `gomcpgo/mcp` SDK.
+A single-binary MCP server for **PostgreSQL** and **MariaDB**, powered by the `gomcpgo/mcp` SDK.
+The database dialect is auto-detected from the DSN URL scheme — no extra flags needed.
 No Node.js, Python, or other runtime required — download, configure the DSN, connect to any MCP client.
 
 ## Features
 
 - **14 tools** — DDL + DML + introspection: list tables, describe, query, count, create, alter, insert, update, delete, list/desc functions, list/desc triggers, list sequences
+- **Dual-dialect** — works against PostgreSQL and MariaDB in the same binary (auto-detected from DSN)
 - **Read-only mode** — hide all write tools with a single flag
 - **Optional EXPLAIN** — opt in to the query plan per call (read tools: with results; write tools: preview without executing)
 - **CSV output** — all query results formatted as clean CSV
@@ -24,8 +26,12 @@ Requires Go 1.23+.
 ## Run
 
 ```bash
-# Using run.sh (requires PG_DSN)
+# PostgreSQL (Postgres DSN via PG_DSN or --dsn)
 export PG_DSN="postgresql://user:pass@host:5432/mydb?sslmode=disable"
+./run.sh run
+
+# MariaDB (MariaDB DSN via MARIADB_DSN or --dsn) — dialect auto-detected from the mysql:// scheme
+export MARIADB_DSN="mysql://user:pass@host:3306/mydb"
 ./run.sh run
 
 # Binary directly
@@ -40,12 +46,12 @@ export PG_DSN="postgresql://user:pass@host:5432/mydb?sslmode=disable"
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--prefix` | *(empty)* | Tool name prefix (e.g. `pg_select_query`) |
-| `--dsn` | — | **Required.** Postgres DSN (`postgresql://user:pass@host:port/db`) |
+| `--dsn` | — | **Required.** Postgres or MariaDB DSN (`postgresql://user:pass@host:port/db` or `mysql://user:pass@host:port/db`). Falls back to `PG_DSN`, then `MARIADB_DSN` |
 | `--read-only` | `false` | Disable write tools |
 | `--log-level` | `error` | `debug \| info \| warn \| error` |
 | `--version` | | Print version and exit |
 
-> **Note:** If your Postgres doesn't have SSL enabled, append `?sslmode=disable` or `?sslmode=prefer` to the DSN.
+> **Note:** The dialect is chosen by the DSN scheme: `postgresql://` → PostgreSQL, `mysql://`/`mariadb://` → MariaDB. If your Postgres doesn't have SSL enabled, append `?sslmode=disable` or `?sslmode=prefer` to the DSN.
 
 ## Tools
 
@@ -83,6 +89,12 @@ export PG_DSN="postgresql://user:pass@host:5432/mydb?sslmode=disable"
         "--dsn", "postgresql://user:pass@host:5432/mydb?sslmode=disable",
         "--read-only"
       ]
+    },
+    "mariadb": {
+      "command": "/path/to/bin/postgres-server",
+      "args": [
+        "--dsn", "mysql://user:pass@host:3306/mydb"
+      ]
     }
   }
 }
@@ -114,6 +126,7 @@ Each integration test spawns the server, sends a JSON-RPC `tools/call`, and vali
 │   ├── postgres.go      # Handler struct + CallTool router
 │   ├── tools.go         # Tool registry (14 tools, read-only filter)
 │   ├── params.go        # parseStringParam + isSQLIdentifier helpers
+│   ├── dialect.go       # Dialect type + DSN-scheme detection (postgres / mariadb)
 │   ├── db.go            # DB pool, DoQuery, HandleExec, ExplainPlan, MapToCSV
 │   ├── query_handlers.go# 4 read handlers
 │   ├── inspect_handlers.go # 5 introspection handlers (functions, triggers, sequences)

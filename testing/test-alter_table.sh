@@ -1,37 +1,31 @@
 #!/bin/bash
-# Test script for alter_table tool (DDL smoke test)
-set -e
+# ==============================================================================
+# test-alter_table.sh — alter_table tool: CREATE TABLE IF NOT EXISTS (both dialects)
+#
+# This is the SETUP test — run it first so the other tests see the table.
+# Usage: bash test-alter_table.sh
+# ==============================================================================
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+do_test() {
+    local label="$1" dsn="$2" db="$3"
+    section "alter_table → CREATE TABLE IF NOT EXISTS $db [$label]"
+    local q payload resp
+    q="CREATE TABLE IF NOT EXISTS ${db}(id INT PRIMARY KEY, name VARCHAR(64) NOT NULL DEFAULT '')"
+    payload=$(printf '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"alter_table","arguments":{"database":"%s","query":"%s"}},"id":2}' "$db" "$q")
+    resp=$(mcp_call "$dsn" "$payload")
 
-if [ -z "$PG_DSN" ]; then
-    echo "⏭️  SKIPPED: PG_DSN not set"
-    exit 0
-fi
+    if ! check_envelope "alter_table [$label]" "$resp"; then
+        return
+    fi
+    if echo "$resp" | jq -e '.result' >/dev/null 2>&1; then
+        pass "alter_table → DDL OK (table $db ready)"
+    else
+        fail "alter_table → DDL failed: $(echo "$resp" | jq -r '.error.message // .error' 2>/dev/null | head -1)"
+    fi
+}
 
-cd "$SCRIPT_DIR/../"
-[ -f "bin/postgres-server" ] || go build -o bin/postgres-server ./cmd
-cd "$SCRIPT_DIR"
+do_test "PostgreSQL" "$PG_DSN" "$PG_DB"
+do_test "MariaDB"    "$MARIADB_DSN" "$MARIADB_DB"
 
-echo "=== Testing alter_table ==="
-
-# Use a safe no-op DDL statement
-RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"alter_table","arguments":{"query":"CREATE TABLE IF NOT EXISTS _mcp_smoke_test(id INT)"}},"id":7}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
-
-echo "Raw response: $RESPONSE"
-
-echo "$RESPONSE" | jq -e '.jsonrpc == "2.0"' > /dev/null 2>&1 && echo "✓ Valid JSON-RPC" || exit 1
-echo "$RESPONSE" | jq -e '.id == 7' > /dev/null 2>&1 && echo "✓ ID preserved" || exit 1
-
-# Accept result OR error — MCP plumbing test
-if echo "$RESPONSE" | jq -e '.result' > /dev/null 2>&1; then
-    echo "✓ Got MCP result (DDL succeeded)"
-elif echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
-    echo "✓ Got MCP error (DDL failed, expected on restricted DBs)"
-else
-    echo "✗ No valid result or error"
-    exit 1
-fi
-
-echo ""
-echo "=== alter_table test PASSED ==="
+summary "ALTER_TABLE TEST"

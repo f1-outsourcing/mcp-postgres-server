@@ -1,38 +1,35 @@
 #!/bin/bash
-# Test script for count_query tool
-set -e
+# ==============================================================================
+# test-count_query.sh — count_query tool on the test table (both dialects)
+# Run AFTER test-alter_table.sh so the table exists.
+#
+# Usage: bash test-count_query.sh
+# ==============================================================================
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+do_test() {
+    local label="$1" dsn="$2" db="$3"
+    section "count_query on $db [$label]"
+    local payload resp
+    payload=$(printf '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"count_query","arguments":{"database":"%s","table":"%s"}},"id":5}' "$db" "$db")
+    resp=$(mcp_call "$dsn" "$payload")
 
-if [ -z "$PG_DSN" ]; then
-    echo "⏭️  SKIPPED: PG_DSN not set"
-    exit 0
-fi
+    if ! check_envelope "count_query [$label]" "$resp"; then
+        return
+    fi
+    if echo "$resp" | jq -e '.result.content[0].type=="text"' >/dev/null 2>&1; then
+        local out; out=$(echo "$resp" | jq -r '.result.content[0].text')
+        if echo "$out" | grep -qE '[0-9]'; then
+            pass "count_query → returned a count: $(echo "$out" | head -1)"
+        else
+            fail "count_query → no number in result: $(echo "$out" | head -2)"
+        fi
+    else
+        fail "count_query → no result (run test-alter_table.sh first): $(echo "$resp" | jq -r '.error.message // .error' 2>/dev/null | head -1)"
+    fi
+}
 
-cd "$SCRIPT_DIR/../"
-[ -f "bin/postgres-server" ] || go build -o bin/postgres-server ./cmd
-cd "$SCRIPT_DIR"
+do_test "PostgreSQL" "$PG_DSN" "$PG_DB"
+do_test "MariaDB"    "$MARIADB_DSN" "$MARIADB_DB"
 
-echo "=== Testing count_query ==="
-
-RESPONSE=$( ( echo '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"count_query","arguments":{"name":"stat_activity"}},"id":5}'; sleep 2 ) | "$SCRIPT_DIR/../bin/postgres-server" --dsn "$PG_DSN" 2>&1 )
-
-echo "Raw response: $RESPONSE"
-
-echo "$RESPONSE" | jq -e '.jsonrpc == "2.0"' > /dev/null 2>&1 && echo "✓ Valid JSON-RPC" || exit 1
-echo "$RESPONSE" | jq -e '.id == 5' > /dev/null 2>&1 && echo "✓ ID preserved" || exit 1
-
-# Accept result OR error
-if echo "$RESPONSE" | jq -e '.result.content[0].type == "text"' > /dev/null 2>&1; then
-    echo "✓ Result content is text"
-    CONTENT=$(echo "$RESPONSE" | jq -r '.result.content[0].text')
-    echo "Content preview: ${CONTENT:0:200}"
-elif echo "$RESPONSE" | jq -e '.error' > /dev/null 2>&1; then
-    echo "✓ Got error response (expected if table missing)"
-else
-    echo "✗ No valid result or error"
-    exit 1
-fi
-
-echo ""
-echo "=== count_query test PASSED ==="
+summary "COUNT_QUERY TEST"

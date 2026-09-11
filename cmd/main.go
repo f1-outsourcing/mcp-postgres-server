@@ -18,7 +18,7 @@ const version = "1.0.0"
 func main() {
 	showVersion := flag.Bool("version", false, "Print version and exit")
 	prefix := flag.String("prefix", "", "Prefix for tool names")
-	dsn := flag.String("dsn", "", "Postgres DSN (e.g. postgresql://user:pass@host:port/db)")
+	dsn := flag.String("dsn", "", "Database DSN. Postgres: postgresql://user:pass@host:port/db. MariaDB: mysql://user:pass@host:port/db (port defaults to 3306 if omitted)")
 	readOnly := flag.Bool("read-only", false, "Disable write tools (create/alter/insert/update/delete)")
 	logLevel := flag.String("log-level", "error", "debug|info|warn|error")
 
@@ -32,9 +32,12 @@ func main() {
 	if *dsn == "" {
 		*dsn = os.Getenv("PG_DSN")
 	}
+	if *dsn == "" {
+		*dsn = os.Getenv("MARIADB_DSN")
+	}
 
 	if *dsn == "" {
-		slog.Error("Missing DSN. Use --dsn or set PG_DSN")
+		slog.Error("Missing DSN. Use --dsn or set PG_DSN (or MARIADB_DSN)")
 		os.Exit(1)
 	}
 
@@ -70,14 +73,20 @@ func main() {
 	// Create and start server. We inject a line-based stdio transport so each
 	// input line is treated as one JSON-RPC message: a single malformed line is
 	// answered with a JSON-RPC error and never breaks processing of the next line.
+	serverName := "mcp-postgres-server"
+	dbType := pgHandler.DBType()
+	if dbType == "mariadb" {
+		serverName = "mcp-mariadb-server"
+	}
+
 	srv := server.New(server.Options{
-		Name:      "mcp-postgres-server",
+		Name:      serverName,
 		Version:   version,
 		Registry:  registry,
 		Transport: newLineStdioTransport(),
 	})
 
-	slog.Info("Starting postgres server", "prefix", *prefix)
+	slog.Info("Starting server", "db_type", dbType, "prefix", *prefix)
 	if err := srv.Run(); err != nil {
 		slog.Error("Server error", "error", err)
 		os.Exit(1)

@@ -14,7 +14,7 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 		{
 			// Tool Definition
 			Name:        prefix + "list_tables",
-			Description: "List all tables in the public schema (pg_catalog and information_schema are excluded)",
+			Description: "List all tables in the database (system schemas are excluded)",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -29,7 +29,7 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 		{
 			// Tool Definition
 			Name:        prefix + "desc_table",
-			Description: "Describe table structure",
+			Description: "Describe table structure including column names, types, nullability, defaults, and primary key info",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -94,7 +94,7 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 		{
 			// Tool Definition
 			Name:        prefix + "list_functions",
-			Description: "List functions, procedures, aggregates and window functions in a schema (default: public, excludes schema-qualified names). One line per overload: kind, fully-qualified name, argument signature, return type, language, owner. Sorted for easy cross-database diffing",
+			Description: "List functions and procedures in the current database. One line per: kind, name, argument signature, return type, language, owner. On PostgreSQL, also includes aggregates and window functions. Sorted for easy cross-database diffing",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -113,7 +113,7 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 		{
 			// Tool Definition
 			Name:        prefix + "desc_function",
-			Description: "Return the full definition (source code) of a single function or procedure, including volatibility, language and source. If the name has overloads, the list of available overload signatures is returned — re-call with `args` to pick one",
+			Description: "Return the full definition (source code) of a single function or procedure. If the name is ambiguous, the list of available overloads is returned — re-call with `args` to pick one",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -140,7 +140,7 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 		{
 			// Tool Definition
 			Name:        prefix + "list_triggers",
-			Description: "List all table triggers (timing, scope, events, target function, enabled state), plus database-level event triggers. Restrict with `table` if needed. Sorted for easy cross-database diffing",
+			Description: "List all table triggers (timing, scope, events, target function) on tables in the current database. Restrict with `table` if needed. On PostgreSQL, event triggers are also included. Sorted for easy cross-database diffing",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -159,7 +159,7 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 		{
 			// Tool Definition
 			Name:        prefix + "desc_trigger",
-			Description: "Return the full DDL (CREATE TRIGGER statement, including the WHEN clause) of a single trigger on a table",
+			Description: "Return the full DDL (CREATE TRIGGER statement) of a single trigger on a table",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -182,7 +182,7 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 		{
 			// Tool Definition
 			Name:        prefix + "list_sequences",
-			Description: "List sequences in a schema (default: public) with their parameters (start, increment, min, max, cache, cycle). Sorted for easy cross-database diffing",
+			Description: "List sequences in the current database with their parameters (start, increment, min, max, cycle). On PostgreSQL, also includes the cache value. Sorted for easy cross-database diffing",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -207,7 +207,7 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 	t = append(t,
 		protocol.Tool{
 			Name:        prefix + "create_table",
-			Description: "Create a new table in the POSTGRES server. Make sure you have added proper comments for each column and the table itself",
+			Description: "Create a new table in the database server. Make sure you have added proper comments for each column and the table itself",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {
@@ -225,7 +225,7 @@ func (h *PostgresHandler) buildTools() []protocol.Tool {
 		},
 		protocol.Tool{
 			Name:        prefix + "alter_table",
-			Description: "Alter an existing table in the POSTGRES server. Make sure you have updated comments for each modified column. DO NOT drop table or existing columns!",
+			Description: "Alter an existing table in the database server. Make sure you have updated comments for each modified column. DO NOT drop table or existing columns!",
 			InputSchema: json.RawMessage(`{
 				"type": "object",
 				"properties": {

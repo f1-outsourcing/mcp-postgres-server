@@ -15,7 +15,21 @@ func (h *PostgresHandler) handleListTable(args map[string]interface{}) (*protoco
 		return nil, err
 	}
 
-	rows, _, err := h.DoQuery(database, "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;")
+	var sql string
+	switch h.dialect {
+	case DialectMariadb:
+		// MariaDB has no "public" schema (schema == database); list base
+		// tables of the current database, excluding system schemas.
+		sql = `SELECT table_name FROM information_schema.tables
+WHERE table_schema = DATABASE()
+  AND table_schema NOT IN ('information_schema', 'mysql', 'performance_schema', 'sys')
+  AND table_type = 'BASE TABLE'
+ORDER BY table_name;`
+	default:
+		sql = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;"
+	}
+
+	rows, _, err := h.DoQuery(database, sql)
 	if err != nil {
 		return nil, fmt.Errorf("list_tables: %w", err)
 	}
@@ -46,16 +60,53 @@ func (h *PostgresHandler) handleDescTable(args map[string]interface{}) (*protoco
 		return nil, fmt.Errorf("invalid table name: %s", table)
 	}
 
-	descsql :=
-		`SELECT
+	var (
+		descsql   string
+		resultKey string
+	)
+	switch h.dialect {
+	case DialectMariadb:
+		// MariaDB: GROUP_CONCAT instead of string_agg; PK detected via
+		// constraint_name = 'PRIMARY'; computed column addressed by its alias.
+		// Use alias 'ddl' (not 'desc' — reserved in MariaDB).
+		// IFNULL guards against SQL NULL leaking through CONCAT (any NULL arg → NULL result).
+		descsql =
+			`SELECT IFNULL(
+    CONCAT('CREATE TABLE ', t.table_name, ' (',
+        IFNULL(GROUP_CONCAT(
+            CONCAT(c.column_name, ' ', UPPER(c.data_type),
+                IFNULL(CONCAT('(', c.character_maximum_length, ')'), ''),
+                IF(c.is_nullable = 'NO', ' NOT NULL', '')
+            ) SEPARATOR ', '
+        ), ''),
+        IFNULL(CONCAT(', PRIMARY KEY (',
+            (SELECT GROUP_CONCAT(kcu2.column_name ORDER BY kcu2.ordinal_position SEPARATOR ', ')
+             FROM information_schema.key_column_usage kcu2
+             WHERE kcu2.table_schema = t.table_schema
+               AND kcu2.table_name = t.table_name
+               AND kcu2.constraint_name = 'PRIMARY'), ')'), ''),
+        ');'), 'UNKNOWN') AS ddl
+FROM
+    information_schema.tables t
+JOIN
+    information_schema.columns c ON t.table_name = c.table_name AND t.table_schema = c.table_schema
+WHERE
+    t.table_schema = DATABASE()
+  AND t.table_name = '` + table + `'
+GROUP BY
+    t.table_name;`
+		resultKey = "ddl"
+	default:
+		descsql =
+			`SELECT
     'CREATE TABLE ' || t.table_name || ' (' ||
     string_agg(
         c.column_name || ' ' || c.data_type ||
-        CASE 
+        CASE
             WHEN c.character_maximum_length IS NOT NULL THEN '(' || c.character_maximum_length || ')'
             ELSE ''
         END ||
-        CASE 
+        CASE
             WHEN c.is_nullable = 'NO' THEN ' NOT NULL'
             ELSE ''
         END, ', '
@@ -74,6 +125,9 @@ WHERE
     t.table_name = '` + table + `'
 GROUP BY
     t.table_name;`
+		// lib/pq returns unnamed computed columns under the key "?column?".
+		resultKey = "?column?"
+	}
 
 	rows, _, err := h.DoQuery(database, descsql)
 	if err != nil {
@@ -84,7 +138,7 @@ GROUP BY
 		return nil, fmt.Errorf("desc_table: table %s not found", table)
 	}
 
-	return textResponse(fmt.Sprintf("%v", rows[0]["?column?"])), nil
+	return textResponse(fmt.Sprintf("%v", rows[0][resultKey])), nil
 }
 
 func (h *PostgresHandler) handleSelectQuery(args map[string]interface{}) (*protocol.CallToolResponse, error) {

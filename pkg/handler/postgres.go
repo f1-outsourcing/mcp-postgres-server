@@ -15,9 +15,14 @@ type PostgresHandler struct {
 	prefix   string
 	dsn      string
 	readOnly bool
+	dialect  Dialect
 	db       *sqlx.DB
 	dbPools  map[string]*sqlx.DB
 }
+
+// DBType returns the detected dialect name ("postgres" or "mariadb").
+// Used by cmd/main.go for startup logging.
+func (h *PostgresHandler) DBType() string { return h.dialect.String() }
 
 // NewPostgresHandler creates a new postgres handler with default prefix
 func NewPostgresHandler() *PostgresHandler {
@@ -29,12 +34,13 @@ func NewPostgresHandlerWithPrefix(prefix string) *PostgresHandler {
 	return &PostgresHandler{prefix: prefix}
 }
 
-// SetDSN stores the Postgres DSN. The physical connection is opened lazily on
-// the first request that needs it (see DB()). No live connect is attempted here
-// so the server can start reading stdin immediately — matching the filesystem
-// server's non-blocking startup.
+// SetDSN stores the DSN (PostgreSQL or MariaDB) and derives the matching
+// dialect from its URL scheme. The physical connection is opened lazily on
+// the first request that needs it (see DB()). No live connect is attempted
+// here so the server can start reading stdin immediately.
 func (h *PostgresHandler) SetDSN(dsn string) {
 	h.dsn = dsn
+	h.dialect = DialectFromDSN(dsn)
 }
 
 // SetReadOnly disables write tools (create/alter/insert/update/delete) when true
